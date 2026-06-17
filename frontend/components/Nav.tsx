@@ -20,8 +20,9 @@ export function Nav() {
         0G Time Capsule
       </Link>
       <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
-        <Link href="/seal"   style={navLink}>New Capsule</Link>
-        <Link href="/reveal" style={navLink}>Open Capsule</Link>
+        <Link href="/seal"    style={navLink}>New Capsule</Link>
+        <Link href="/gallery" style={navLink}>My Capsules</Link>
+        <Link href="/reveal"  style={navLink}>Open Capsule</Link>
         <ConnectButton />
       </div>
     </nav>
