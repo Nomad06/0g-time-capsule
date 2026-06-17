@@ -56,11 +56,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       description,
       type:      "website",
       siteName:  "0G Time Capsule",
+      images:    [{ url: `/proof/${id}/opengraph-image`, width: 1200, height: 630 }],
     },
     twitter: {
-      card:        "summary",
+      card:        "summary_large_image",
       title,
       description,
+      images:    [`/proof/${id}/opengraph-image`],
     },
   };
 }
