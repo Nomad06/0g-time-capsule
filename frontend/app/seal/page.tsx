@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { useAccount } from "wagmi";
+import { useRouter } from "next/navigation";
 import { sealCapsule } from "../../lib/capsule";
 import { ConnectButton } from "../../components/ConnectButton";
 import type { SealResult } from "../../lib/types";
 
 export default function SealPage() {
   const { isConnected } = useAccount();
+  const router = useRouter();
 
   const [message,  setMessage]  = useState("");
   const [minutes,  setMinutes]  = useState(2);
@@ -29,9 +31,10 @@ export default function SealPage() {
 
       setStatus("Encrypting + uploading to 0G…");
       const res = await sealCapsule({ plaintext: message, unlockTime });
-
       setResult(res);
       setStatus("Sealed!");
+      // Redirect to proof page after 1.5s
+      setTimeout(() => router.push(`/proof/${res.capsuleId}`), 1500);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
