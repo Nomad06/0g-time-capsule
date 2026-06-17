@@ -35,12 +35,45 @@ export interface RecipientParam {
   pubkey:  Uint8Array;   // 33-byte compressed secp256k1 from KeyRegistry
 }
 
+// Stage 3: trigger configs ─────────────────────────────────────────────────────
+
+export interface DeadManSwitchConfig {
+  intervalDays: number;   // days between required check-ins
+}
+
+export interface MultiSigConfig {
+  signers:   `0x${string}`[];
+  threshold: number;
+}
+
 export interface SealParams {
   plaintext:        string;               // UTF-8 message
   unlockTime:       Date;                 // JS Date → unix timestamp on-chain
   recipients?:      RecipientParam[];     // empty = public; Stage 2: each gets ECIES key
   triggerType?:     TriggerType;
   triggerContract?: `0x${string}`;
+  deadman?:         DeadManSwitchConfig;  // required when triggerType === DEADMAN
+  multisig?:        MultiSigConfig;       // required when triggerType === MULTISIG
+}
+
+// ── Trigger state views ───────────────────────────────────────────────────────
+
+export interface SwitchInfo {
+  owner:       `0x${string}`;
+  interval:    bigint;
+  lastCheckin: bigint;
+  triggered:   boolean;
+  revealed:    boolean;
+  deadline:    bigint;    // lastCheckin + interval
+  overdue:     boolean;
+}
+
+export interface VaultInfo {
+  owner:         `0x${string}`;
+  threshold:     number;
+  approvalCount: number;
+  revealed:      boolean;
+  signers:       `0x${string}`[];
 }
 
 export interface SealResult {

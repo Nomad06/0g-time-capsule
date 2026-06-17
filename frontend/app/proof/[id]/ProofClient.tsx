@@ -148,6 +148,26 @@ export function ProofClient({ capsuleId }: Props) {
         </div>
       )}
 
+      {/* Stage 3: trigger management links */}
+      {capsule && capsule.triggerType === 1 && (
+        <div style={{ margin: "16px 0", padding: "12px 16px", background: "#0d0600", border: "1px solid #78350f", borderRadius: 8 }}>
+          <span style={{ color: "#fb923c", fontSize: 13, fontWeight: "bold" }}>Dead Man&apos;s Switch</span>
+          {" — "}
+          <Link href={`/triggers/deadman/${capsuleId}`} style={{ color: "#818cf8", fontSize: 13 }}>
+            Manage switch (check in / trigger) →
+          </Link>
+        </div>
+      )}
+      {capsule && capsule.triggerType === 3 && (
+        <div style={{ margin: "16px 0", padding: "12px 16px", background: "#0a0a14", border: "1px solid #1e1b4b", borderRadius: 8 }}>
+          <span style={{ color: "#a5b4fc", fontSize: 13, fontWeight: "bold" }}>Multi-Sig Reveal</span>
+          {" — "}
+          <Link href={`/triggers/multisig/${capsuleId}`} style={{ color: "#818cf8", fontSize: 13 }}>
+            Manage approvals →
+          </Link>
+        </div>
+      )}
+
       {/* Actions */}
       {!result && capsule && (
         <div style={{ margin: "24px 0" }}>
