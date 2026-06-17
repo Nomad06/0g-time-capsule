@@ -33,7 +33,9 @@ import {
   setRecipientKeys,
   getRecipientKey,
 } from "./contract";
+import { armSwitch, createVault } from "./triggers";
 import { roundForTime } from "./drand";
+import { TriggerType } from "./types";
 import type { SealParams, SealResult, RevealResult } from "./types";
 
 // ── Seal ──────────────────────────────────────────────────────────────────────
@@ -72,6 +74,23 @@ export async function sealCapsule(params: SealParams): Promise<SealResult> {
       bytesToHex(eciesEncrypt(r.pubkey, dataKey))
     );
     await setRecipientKeys(capsuleId, recipientAddresses, encryptedKeys);
+  }
+
+  // 6. Stage 3: set up trigger module after seal
+  if (triggerType === TriggerType.DEADMAN && params.deadman) {
+    const [account] = await (await import("./contract")).getWalletClient().getAddresses();
+    const intervalSec = BigInt(params.deadman.intervalDays * 86400);
+    await armSwitch(capsuleId, account, intervalSec);
+  }
+
+  if (triggerType === TriggerType.MULTISIG && params.multisig) {
+    const [account] = await (await import("./contract")).getWalletClient().getAddresses();
+    await createVault(
+      capsuleId,
+      account,
+      params.multisig.signers,
+      params.multisig.threshold
+    );
   }
 
   return { capsuleId, storageRoot, commitHash, drandRound, txHash };
