@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { time, loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers";
-import type { TimeCapsule, DeadManSwitch, MultiSigReveal } from "../typechain-types";
+import type { TimeCapsule, DeadManSwitch, MultiSigReveal, KeyRegistry } from "../typechain-types";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -43,7 +43,10 @@ async function deployAll() {
   const MSR = await ethers.getContractFactory("MultiSigReveal");
   const msr = await MSR.deploy(await tc.getAddress()) as unknown as MultiSigReveal;
 
-  return { ...base, dms, msr };
+  const KR = await ethers.getContractFactory("KeyRegistry");
+  const kr = await KR.deploy() as unknown as KeyRegistry;
+
+  return { ...base, dms, msr, kr };
 }
 
 // ─── TimeCapsule: seal ────────────────────────────────────────────────────────
@@ -333,5 +336,104 @@ describe("MultiSigReveal", () => {
 
     await expect(msr.connect(alice).approve(capsuleId))
       .to.be.revertedWithCustomError(msr, "AlreadyApproved");
+  });
+});
+
+// ─── Stage 2: KeyRegistry ─────────────────────────────────────────────────────
+
+describe("KeyRegistry", () => {
+  const FAKE_PUBKEY = ethers.randomBytes(33);
+
+  it("registers a 33-byte pubkey and retrieves it", async () => {
+    const { kr, alice } = await loadFixture(deployAll);
+    await kr.connect(alice).registerKey(FAKE_PUBKEY);
+    const stored = await kr.getKey(alice.address);
+    expect(ethers.getBytes(stored)).to.deep.equal(FAKE_PUBKEY);
+    expect(await kr.hasKey(alice.address)).to.be.true;
+  });
+
+  it("returns empty for unregistered wallet", async () => {
+    const { kr, bob } = await loadFixture(deployAll);
+    const stored = await kr.getKey(bob.address);
+    expect(stored).to.equal("0x");
+    expect(await kr.hasKey(bob.address)).to.be.false;
+  });
+
+  it("rejects pubkeys with wrong length", async () => {
+    const { kr, alice } = await loadFixture(deployAll);
+    await expect(kr.connect(alice).registerKey(ethers.randomBytes(64)))
+      .to.be.revertedWithCustomError(kr, "InvalidPubkeyLength");
+  });
+
+  it("emits KeyRegistered event", async () => {
+    const { kr, alice } = await loadFixture(deployAll);
+    await expect(kr.connect(alice).registerKey(FAKE_PUBKEY))
+      .to.emit(kr, "KeyRegistered")
+      .withArgs(alice.address, FAKE_PUBKEY);
+  });
+
+  it("allows overwriting registered key", async () => {
+    const { kr, alice } = await loadFixture(deployAll);
+    const pubkey1 = ethers.randomBytes(33);
+    const pubkey2 = ethers.randomBytes(33);
+    await kr.connect(alice).registerKey(pubkey1);
+    await kr.connect(alice).registerKey(pubkey2);
+    const stored = await kr.getKey(alice.address);
+    expect(ethers.getBytes(stored)).to.deep.equal(pubkey2);
+  });
+});
+
+// ─── Stage 2: recipient keys on TimeCapsule ───────────────────────────────────
+
+describe("TimeCapsule — recipient keys (Stage 2)", () => {
+  const FAKE_ENVELOPE = ethers.randomBytes(93);  // 33 + 12 + 48
+
+  async function sealWithRecipient() {
+    const { tc, owner, alice } = await loadFixture(deployTimeCapsule);
+    const unlockTime = (await time.latest()) + 120;
+    await tc.seal(
+      FAKE_STORAGE_ROOT, PLAINTEXT_HASH, TIMELOCK_HEADER,
+      unlockTime, 0,
+      [alice.address],  // recipient
+      0, ethers.ZeroAddress
+    );
+    const capsuleId = (await tc.getOwnerCapsules(owner.address))[0];
+    return { tc, owner, alice, capsuleId };
+  }
+
+  it("owner can set and retrieve a recipient key", async () => {
+    const { tc, capsuleId, alice } = await sealWithRecipient();
+    await tc.setRecipientKeys(capsuleId, [alice.address], [FAKE_ENVELOPE]);
+    const stored = await tc.getRecipientKey(capsuleId, alice.address);
+    expect(ethers.getBytes(stored)).to.deep.equal(FAKE_ENVELOPE);
+  });
+
+  it("emits RecipientKeySet", async () => {
+    const { tc, capsuleId, alice } = await sealWithRecipient();
+    await expect(tc.setRecipientKeys(capsuleId, [alice.address], [FAKE_ENVELOPE]))
+      .to.emit(tc, "RecipientKeySet")
+      .withArgs(capsuleId, alice.address);
+  });
+
+  it("non-owner cannot set recipient keys", async () => {
+    const { tc, capsuleId, alice } = await sealWithRecipient();
+    await expect(
+      tc.connect(alice).setRecipientKeys(capsuleId, [alice.address], [FAKE_ENVELOPE])
+    ).to.be.revertedWithCustomError(tc, "NotOwner");
+  });
+
+  it("reverts if recipients/keys length mismatch", async () => {
+    const { tc, capsuleId, alice } = await sealWithRecipient();
+    const { bob } = await loadFixture(deployTimeCapsule);
+    await expect(
+      tc.setRecipientKeys(capsuleId, [alice.address, bob.address], [FAKE_ENVELOPE])
+    ).to.be.revertedWithCustomError(tc, "ArrayLengthMismatch");
+  });
+
+  it("returns empty for unset recipient", async () => {
+    const { tc, capsuleId } = await sealWithRecipient();
+    const { bob } = await loadFixture(deployTimeCapsule);
+    const stored = await tc.getRecipientKey(capsuleId, bob.address);
+    expect(stored).to.equal("0x");
   });
 });

@@ -83,6 +83,7 @@ export function encryptForSeal(plaintext: string, drandRound: number): {
   timelockHeader: Uint8Array;     // 100 bytes → seal() on-chain
   commitHash:     `0x${string}`; // keccak256(plaintext) → seal() on-chain
   wrapKey:        Uint8Array;     // keep in memory; pass to buildRevealSignature() test helper
+  dataKey:        Uint8Array;     // raw key — Stage 2: ECIES-wrap per recipient
 } {
   const dataKey     = randomBytes(32);
   const capsuleSeed = randomBytes(SEED_LEN);
@@ -102,6 +103,7 @@ export function encryptForSeal(plaintext: string, drandRound: number): {
     timelockHeader: encodeHeader({ capsuleSeed, drandRound, nonce2, wrappedKey }),
     commitHash: makeCommitHash(plaintext),
     wrapKey,
+    dataKey,
   };
 }
 

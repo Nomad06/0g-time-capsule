@@ -4,19 +4,21 @@ import { useState } from "react";
 import { useAccount } from "wagmi";
 import { useRouter } from "next/navigation";
 import { sealCapsule } from "../../lib/capsule";
+import { getEncryptionKey } from "../../lib/contract";
 import { ConnectButton } from "../../components/ConnectButton";
-import type { SealResult } from "../../lib/types";
+import type { SealResult, RecipientParam } from "../../lib/types";
 
 export default function SealPage() {
   const { isConnected } = useAccount();
   const router = useRouter();
 
-  const [message,  setMessage]  = useState("");
-  const [minutes,  setMinutes]  = useState(2);
-  const [result,   setResult]   = useState<SealResult | null>(null);
-  const [status,   setStatus]   = useState("");
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState("");
+  const [message,     setMessage]     = useState("");
+  const [minutes,     setMinutes]     = useState(2);
+  const [recipInput,  setRecipInput]  = useState("");  // comma-separated addresses
+  const [result,      setResult]      = useState<SealResult | null>(null);
+  const [status,      setStatus]      = useState("");
+  const [loading,     setLoading]     = useState(false);
+  const [error,       setError]       = useState("");
 
   async function handleSeal() {
     if (!message.trim())  { setError("Message is empty"); return; }
@@ -29,11 +31,32 @@ export default function SealPage() {
     try {
       const unlockTime = new Date(Date.now() + minutes * 60 * 1000);
 
+      // Parse recipients — resolve each to their registered pubkey
+      const rawAddresses = recipInput
+        .split(/[\s,]+/)
+        .map(s => s.trim())
+        .filter(s => s.startsWith("0x") && s.length === 42) as `0x${string}`[];
+
+      let recipients: RecipientParam[] = [];
+
+      if (rawAddresses.length > 0) {
+        setStatus("Fetching recipient encryption keys…");
+        recipients = await Promise.all(
+          rawAddresses.map(async (address) => {
+            const pubkeyHex = await getEncryptionKey(address);
+            if (!pubkeyHex || pubkeyHex === "0x") {
+              throw new Error(`Recipient ${address} has not registered an encryption key. Ask them to visit /register first.`);
+            }
+            const pubkey = new Uint8Array(Buffer.from(pubkeyHex.slice(2), "hex"));
+            return { address, pubkey };
+          })
+        );
+      }
+
       setStatus("Encrypting + uploading to 0G…");
-      const res = await sealCapsule({ plaintext: message, unlockTime });
+      const res = await sealCapsule({ plaintext: message, unlockTime, recipients });
       setResult(res);
       setStatus("Sealed!");
-      // Redirect to proof page after 1.5s
       setTimeout(() => router.push(`/proof/${res.capsuleId}`), 1500);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -77,6 +100,26 @@ export default function SealPage() {
         <span style={{ color: "#888" }}>minutes</span>
       </div>
 
+      {/* Recipients — Stage 2 */}
+      <div style={{ marginTop: 20 }}>
+        <label style={{ color: "#888", fontSize: 13, display: "block", marginBottom: 6 }}>
+          Recipients (optional — leave blank for public capsule)
+        </label>
+        <input
+          type="text"
+          placeholder="0xAbc…, 0xDef… (comma-separated wallet addresses)"
+          value={recipInput}
+          onChange={(e) => setRecipInput(e.target.value)}
+          disabled={loading}
+          style={inputStyle}
+        />
+        <p style={{ color: "#555", fontSize: 12, marginTop: 4 }}>
+          Each address must have registered an encryption key at{" "}
+          <a href="/register" style={{ color: "#818cf8" }}>/register</a>.
+          Only designated recipients will be able to decrypt.
+        </p>
+      </div>
+
       <button
         onClick={handleSeal}
         disabled={loading || !isConnected}
@@ -100,10 +143,10 @@ export default function SealPage() {
           <Field label="Drand Round"  value={String(result.drandRound)} />
           <Field label="Tx Hash"      value={result.txHash} />
           <a
-            href={`/reveal/${result.capsuleId}`}
+            href={`/proof/${result.capsuleId}`}
             style={{ color: "#60a5fa", marginTop: 16, display: "block" }}
           >
-            Go to reveal page →
+            Go to proof page →
           </a>
         </div>
       )}

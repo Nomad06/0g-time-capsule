@@ -5,7 +5,8 @@ import { useAccount } from "wagmi";
 import { BrowserProvider } from "ethers";
 import Link from "next/link";
 import { getCapsule, isUnlocked } from "../../../lib/contract";
-import { revealCapsule, decryptRevealed } from "../../../lib/capsule";
+import { revealCapsule, decryptRevealed, decryptAsRecipient } from "../../../lib/capsule";
+import { loadPrivKeyFromStorage, hasSavedPrivKey } from "../../../lib/ecies";
 import { HashVerifyAnimation } from "../../../components/HashVerifyAnimation";
 import { CountdownClock } from "../../../components/CountdownClock";
 import type { OnChainCapsule, RevealResult } from "../../../lib/types";
@@ -66,6 +67,18 @@ export function ProofClient({ capsuleId }: Props) {
     } finally { setLoading(false); }
   }
 
+  async function handleRecipientDecrypt() {
+    if (!address) return;
+    setLoading(true); setError(""); setStatus("Decrypting with your local key…");
+    try {
+      const privKey = loadPrivKeyFromStorage(address);
+      if (!privKey) throw new Error("No local encryption key found. Visit /register to import or regenerate.");
+      setResult(await decryptAsRecipient(capsuleId, address, privKey));
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally { setLoading(false); }
+  }
+
   function copyLink() {
     navigator.clipboard.writeText(window.location.href);
     setCopied(true);
@@ -73,6 +86,9 @@ export function ProofClient({ capsuleId }: Props) {
   }
 
   const isOwner        = capsule && address && capsule.owner.toLowerCase() === address.toLowerCase();
+  const isRecipient    = capsule && address &&
+    capsule.recipients.some(r => r.toLowerCase() === address?.toLowerCase());
+  const hasLocalKey    = address ? hasSavedPrivKey(address) : false;
   const alreadyRevealed = capsule?.state === 1;
   const unlockDate      = capsule ? new Date(Number(capsule.unlockTime) * 1000) : null;
   const sealDate        = capsule ? new Date(Number(capsule.createdAt) * 1000) : null;
@@ -151,9 +167,28 @@ export function ProofClient({ capsuleId }: Props) {
             </button>
           )}
 
+          {/* Stage 2: recipient decrypt — no signing needed, uses local ECIES key */}
+          {alreadyRevealed && isConnected && isRecipient && !isOwner && (
+            <div>
+              <button
+                onClick={handleRecipientDecrypt}
+                disabled={loading || !hasLocalKey}
+                style={{ ...primaryBtn, background: hasLocalKey ? "#1d4ed8" : "#1a1a1a" }}
+              >
+                {loading ? status : "Decrypt as recipient"}
+              </button>
+              {!hasLocalKey && (
+                <p style={{ color: "#f59e0b", fontSize: 12, marginTop: 6 }}>
+                  No local encryption key found.{" "}
+                  <a href="/register" style={{ color: "#818cf8" }}>Register or import your key →</a>
+                </p>
+              )}
+            </div>
+          )}
+
           {alreadyRevealed && !isConnected && (
             <p style={{ color: "#666", fontSize: 14 }}>
-              Capsule revealed. Connect wallet (owner) to decrypt.
+              Capsule revealed. Connect wallet to decrypt.
             </p>
           )}
         </div>

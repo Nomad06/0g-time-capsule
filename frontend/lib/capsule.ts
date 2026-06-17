@@ -20,9 +20,19 @@ import {
   decryptFromReveal,
   revealSignMessage,
   makeCommitHash,
+  hexToBytes,
+  bytesToHex,
 } from "./crypto";
+import { eciesEncrypt, eciesDecrypt } from "./ecies";
 import { uploadToStorage, downloadFromStorage } from "./storage";
-import { sealOnChain, revealOnChain, getCapsule, verifyOnChain } from "./contract";
+import {
+  sealOnChain,
+  revealOnChain,
+  getCapsule,
+  verifyOnChain,
+  setRecipientKeys,
+  getRecipientKey,
+} from "./contract";
 import { roundForTime } from "./drand";
 import type { SealParams, SealResult, RevealResult } from "./types";
 
@@ -31,29 +41,38 @@ import type { SealParams, SealResult, RevealResult } from "./types";
 export async function sealCapsule(params: SealParams): Promise<SealResult> {
   const { plaintext, unlockTime, recipients = [], triggerType = 0, triggerContract } = params;
 
-  if (!plaintext.trim())     throw new Error("Plaintext cannot be empty");
+  if (!plaintext.trim())       throw new Error("Plaintext cannot be empty");
   if (unlockTime <= new Date()) throw new Error("Unlock time must be in the future");
 
   // 1. Map unlock time → drand round
   const drandRound = await roundForTime(unlockTime);
 
-  // 2. Encrypt
-  const { packed, timelockHeader, commitHash } = encryptForSeal(plaintext, drandRound);
+  // 2. Encrypt — also returns raw dataKey for Stage 2 ECIES wrapping
+  const { packed, timelockHeader, commitHash, dataKey } = encryptForSeal(plaintext, drandRound);
 
-  // 3. Upload to 0G Storage (handled server-side via /api/storage/upload)
+  // 3. Upload to 0G Storage
   const { rootHash: storageRoot } = await uploadToStorage(packed);
 
   // 4. Commit on-chain
-  const unlockTimestamp = BigInt(Math.floor(unlockTime.getTime() / 1000));
+  const recipientAddresses = recipients.map(r => r.address);
+  const unlockTimestamp    = BigInt(Math.floor(unlockTime.getTime() / 1000));
   const { txHash, capsuleId } = await sealOnChain({
     storageRoot,
     commitHash,
     timelockHeader: `0x${Buffer.from(timelockHeader).toString("hex")}`,
     unlockTime:     unlockTimestamp,
-    recipients,
+    recipients:     recipientAddresses,
     triggerType,
     triggerContract,
   });
+
+  // 5. Stage 2: deposit ECIES-encrypted dataKey per recipient
+  if (recipients.length > 0) {
+    const encryptedKeys = recipients.map(r =>
+      bytesToHex(eciesEncrypt(r.pubkey, dataKey))
+    );
+    await setRecipientKeys(capsuleId, recipientAddresses, encryptedKeys);
+  }
 
   return { capsuleId, storageRoot, commitHash, drandRound, txHash };
 }
@@ -82,6 +101,46 @@ export async function revealCapsule(
   const plaintext = decryptFromReveal(packed, timelockHeader, signatureHex);
 
   // 4. Verify proof-of-existence
+  const hash     = makeCommitHash(plaintext);
+  const verified = await verifyOnChain(capsuleId, hash);
+
+  return { capsuleId, plaintext, commitHash: hash, verified };
+}
+
+/**
+ * Stage 2: Decrypt a capsule as a designated recipient using their stored ECIES private key.
+ * The capsule must already be revealed on-chain.
+ *
+ * @param capsuleId   Capsule to decrypt
+ * @param privKey     Recipient's secp256k1 private key (from localStorage via loadPrivKeyFromStorage)
+ */
+export async function decryptAsRecipient(
+  capsuleId: `0x${string}`,
+  address:   `0x${string}`,
+  privKey:   Uint8Array
+): Promise<RevealResult> {
+  const cap = await getCapsule(capsuleId);
+  if (cap.state !== 1) throw new Error("Capsule not yet revealed on-chain");
+
+  // Fetch the ECIES-encrypted envelope for this recipient
+  const envelopeHex = await getRecipientKey(capsuleId, address);
+  if (!envelopeHex || envelopeHex === "0x") {
+    throw new Error("No encrypted key found for your address on this capsule");
+  }
+
+  const envelope = hexToBytes(envelopeHex);
+  const dataKey  = eciesDecrypt(privKey, envelope);
+
+  const packed   = await downloadFromStorage(cap.storageRoot);
+
+  // AES-decrypt with the ECIES-recovered dataKey
+  const { gcm } = await import("@noble/ciphers/aes");
+  const NONCE_LEN = 12;
+  const nonce1    = packed.slice(0, NONCE_LEN);
+  const ct        = packed.slice(NONCE_LEN);
+  const { bytesToUtf8 } = await import("@noble/ciphers/utils");
+  const plaintext = bytesToUtf8(gcm(dataKey, nonce1).decrypt(ct));
+
   const hash     = makeCommitHash(plaintext);
   const verified = await verifyOnChain(capsuleId, hash);
 

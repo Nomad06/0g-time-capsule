@@ -30,11 +30,16 @@ export interface OnChainCapsule {
 
 // ── Seal params ───────────────────────────────────────────────────────────────
 
+export interface RecipientParam {
+  address: `0x${string}`;
+  pubkey:  Uint8Array;   // 33-byte compressed secp256k1 from KeyRegistry
+}
+
 export interface SealParams {
-  plaintext:   string;             // UTF-8 message
-  unlockTime:  Date;               // JS Date → unix timestamp on-chain
-  recipients?: `0x${string}`[];   // empty = public
-  triggerType?: TriggerType;
+  plaintext:        string;               // UTF-8 message
+  unlockTime:       Date;                 // JS Date → unix timestamp on-chain
+  recipients?:      RecipientParam[];     // empty = public; Stage 2: each gets ECIES key
+  triggerType?:     TriggerType;
   triggerContract?: `0x${string}`;
 }
 
