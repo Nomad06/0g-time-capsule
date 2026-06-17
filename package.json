@@ -1,0 +1,40 @@
+{
+  "name": "0g-time-capsule-contracts",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "test:gas": "REPORT_GAS=true hardhat test",
+    "deploy:testnet": "hardhat run scripts/deploy.ts --network zerogTestnet",
+    "deploy:nft": "hardhat run scripts/deploy-nft.ts --network zerogTestnet",
+    "deploy:local": "hardhat run scripts/deploy.ts --network localhost",
+    "node": "hardhat node",
+    "typechain": "hardhat typechain",
+    "lint": "solhint 'contracts/**/*.sol'",
+    "demo": "ts-node --project tsconfig.json scripts/demo.ts",
+    "demo:fast": "DEMO_UNLOCK_MINUTES=1 ts-node --project tsconfig.json scripts/demo.ts"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-ethers": "^3.0.0",
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@typechain/ethers-v6": "^0.5.0",
+    "@typechain/hardhat": "^9.0.0",
+    "@types/chai": "^4.3.0",
+    "@types/mocha": "^10.0.0",
+    "@types/node": "^20.0.0",
+    "chai": "^4.3.0",
+    "dotenv": "^16.0.0",
+    "hardhat": "^2.22.0",
+    "hardhat-gas-reporter": "^1.0.10",
+    "solhint": "^5.0.0",
+    "ts-node": "^10.9.0",
+    "typechain": "^8.3.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@noble/ciphers": "^2.2.0",
+    "@noble/hashes": "^2.2.0",
+    "@openzeppelin/contracts": "^5.0.0"
+  }
+}
