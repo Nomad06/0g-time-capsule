@@ -43,6 +43,9 @@ contract TimeCapsule is ReentrancyGuard {
     mapping(address => bytes32[]) private _ownerIndex;
     mapping(address => bytes32[]) private _recipientIndex;
 
+    /// Stage 2: per-recipient ECIES-encrypted dataKey envelopes (93 bytes each)
+    mapping(bytes32 => mapping(address => bytes)) private _recipientKeys;
+
     uint256 private _nonce;
 
     // ─── Events ───────────────────────────────────────────────────────────────
@@ -63,15 +66,23 @@ contract TimeCapsule is ReentrancyGuard {
         bytes   timelockHeader
     );
 
+    /// Stage 2: emitted when owner deposits an ECIES-encrypted key for a recipient.
+    event RecipientKeySet(
+        bytes32 indexed capsuleId,
+        address indexed recipient
+    );
+
     // ─── Errors ───────────────────────────────────────────────────────────────
 
     error CapsuleNotFound(bytes32 capsuleId);
     error CapsuleLocked(bytes32 capsuleId, uint64 unlockTime, uint64 unlockBlock);
     error CapsuleAlreadyRevealed(bytes32 capsuleId);
     error NotRecipient(bytes32 capsuleId, address caller);
+    error NotOwner(bytes32 capsuleId, address caller);
     error TriggerDenied(bytes32 capsuleId, address caller);
     error InvalidUnlockCondition();
     error InvalidStorageRoot();
+    error ArrayLengthMismatch();
 
     // ─── Seal ─────────────────────────────────────────────────────────────────
 
@@ -140,6 +151,35 @@ contract TimeCapsule is ReentrancyGuard {
         }
 
         emit CapsuleRevealed(capsuleId, msg.sender, cap.timelockHeader);
+    }
+
+    // ─── Stage 2 — Recipient keys ─────────────────────────────────────────────
+
+    /// @notice Deposit ECIES-encrypted dataKey envelopes for each recipient.
+    ///         Must be called by the capsule owner after seal().
+    ///         Each envelope is epkPub(33) ++ nonce(12) ++ ct(48) = 93 bytes.
+    function setRecipientKeys(
+        bytes32   capsuleId,
+        address[] calldata recipients,
+        bytes[]   calldata encryptedKeys
+    ) external {
+        if (recipients.length != encryptedKeys.length) revert ArrayLengthMismatch();
+        Capsule storage cap = _capsules[capsuleId];
+        if (cap.owner == address(0))    revert CapsuleNotFound(capsuleId);
+        if (cap.owner != msg.sender)    revert NotOwner(capsuleId, msg.sender);
+
+        for (uint256 i; i < recipients.length; ++i) {
+            _recipientKeys[capsuleId][recipients[i]] = encryptedKeys[i];
+            emit RecipientKeySet(capsuleId, recipients[i]);
+        }
+    }
+
+    /// @notice Returns the ECIES-encrypted dataKey envelope for a given recipient.
+    ///         Returns empty bytes if no key has been deposited.
+    function getRecipientKey(bytes32 capsuleId, address recipient)
+        external view returns (bytes memory)
+    {
+        return _recipientKeys[capsuleId][recipient];
     }
 
     // ─── Verify (Stage 1 — proof of existence) ────────────────────────────────

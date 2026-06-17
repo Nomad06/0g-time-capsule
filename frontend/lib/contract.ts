@@ -13,7 +13,7 @@ import {
   type PublicClient,
   type Hash,
 } from "viem";
-import { zeroGTestnet, CONTRACT_ADDRESSES, TIME_CAPSULE_ABI } from "../constants/contracts";
+import { zeroGTestnet, CONTRACT_ADDRESSES, TIME_CAPSULE_ABI, KEY_REGISTRY_ABI } from "../constants/contracts";
 import type { OnChainCapsule, TriggerType } from "./types";
 
 // ── Clients ───────────────────────────────────────────────────────────────────
@@ -181,4 +181,83 @@ export async function getRecipientCapsules(recipient: `0x${string}`): Promise<`0
     args:         [recipient],
   });
   return ids as `0x${string}`[];
+}
+
+// ── Stage 2: recipient keys ───────────────────────────────────────────────────
+
+export async function setRecipientKeys(
+  capsuleId:     `0x${string}`,
+  recipients:    `0x${string}`[],
+  encryptedKeys: `0x${string}`[]
+): Promise<Hash> {
+  const wallet = getWalletClient();
+  const pub    = getPublicClient();
+  const [account] = await wallet.getAddresses();
+
+  const txHash = await wallet.writeContract({
+    account,
+    chain:        zeroGTestnet,
+    address:      CONTRACT_ADDRESSES.TimeCapsule,
+    abi:          TIME_CAPSULE_ABI,
+    functionName: "setRecipientKeys",
+    args:         [capsuleId, recipients, encryptedKeys],
+  });
+
+  await pub.waitForTransactionReceipt({ hash: txHash });
+  return txHash;
+}
+
+export async function getRecipientKey(
+  capsuleId: `0x${string}`,
+  recipient: `0x${string}`
+): Promise<`0x${string}`> {
+  const pub = getPublicClient();
+  const raw = await pub.readContract({
+    address:      CONTRACT_ADDRESSES.TimeCapsule,
+    abi:          TIME_CAPSULE_ABI,
+    functionName: "getRecipientKey",
+    args:         [capsuleId, recipient],
+  });
+  return raw as `0x${string}`;
+}
+
+// ── Stage 2: key registry ─────────────────────────────────────────────────────
+
+export async function registerEncryptionKey(pubkeyHex: `0x${string}`): Promise<Hash> {
+  const wallet = getWalletClient();
+  const pub    = getPublicClient();
+  const [account] = await wallet.getAddresses();
+
+  const txHash = await wallet.writeContract({
+    account,
+    chain:        zeroGTestnet,
+    address:      CONTRACT_ADDRESSES.KeyRegistry,
+    abi:          KEY_REGISTRY_ABI,
+    functionName: "registerKey",
+    args:         [pubkeyHex],
+  });
+
+  await pub.waitForTransactionReceipt({ hash: txHash });
+  return txHash;
+}
+
+export async function getEncryptionKey(wallet: `0x${string}`): Promise<`0x${string}`> {
+  const pub = getPublicClient();
+  const raw = await pub.readContract({
+    address:      CONTRACT_ADDRESSES.KeyRegistry,
+    abi:          KEY_REGISTRY_ABI,
+    functionName: "getKey",
+    args:         [wallet],
+  });
+  return raw as `0x${string}`;
+}
+
+export async function hasEncryptionKey(wallet: `0x${string}`): Promise<boolean> {
+  const pub = getPublicClient();
+  return pub.readContract({
+    address:      CONTRACT_ADDRESSES.KeyRegistry,
+    abi:          KEY_REGISTRY_ABI,
+    functionName: "hasKey",
+    args:         [wallet],
+  });
 }

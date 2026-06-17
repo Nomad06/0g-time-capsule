@@ -13,6 +13,13 @@ async function main() {
   const tcAddress = await tc.getAddress();
   console.log(`TimeCapsule deployed:    ${tcAddress}`);
 
+  // ── KeyRegistry (Stage 2) ──────────────────────────────────────────────────
+  const KR = await ethers.getContractFactory("KeyRegistry");
+  const kr = await KR.deploy();
+  await kr.waitForDeployment();
+  const krAddress = await kr.getAddress();
+  console.log(`KeyRegistry deployed:    ${krAddress}`);
+
   // ── DeadManSwitch ───────────────────────────────────────────────────────────
   const DMS = await ethers.getContractFactory("DeadManSwitch");
   const dms = await DMS.deploy(tcAddress);
@@ -34,6 +41,7 @@ async function main() {
     deployedAt: new Date().toISOString(),
     contracts: {
       TimeCapsule:    tcAddress,
+      KeyRegistry:    krAddress,
       DeadManSwitch:  dmsAddress,
       MultiSigReveal: msrAddress,
     },

@@ -29,6 +29,7 @@ export const CONTRACT_ADDRESSES = {
   TimeCapsule:    (process.env.NEXT_PUBLIC_TIME_CAPSULE_ADDRESS    ?? "0x") as `0x${string}`,
   DeadManSwitch:  (process.env.NEXT_PUBLIC_DEAD_MAN_SWITCH_ADDRESS ?? "0x") as `0x${string}`,
   MultiSigReveal: (process.env.NEXT_PUBLIC_MULTI_SIG_REVEAL_ADDRESS ?? "0x") as `0x${string}`,
+  KeyRegistry:    (process.env.NEXT_PUBLIC_KEY_REGISTRY_ADDRESS    ?? "0x") as `0x${string}`,
 } as const;
 
 // ── ABIs (minimal — only functions we call from the frontend) ─────────────────
@@ -136,6 +137,70 @@ export const TIME_CAPSULE_ABI = [
       { name: "capsuleId",      type: "bytes32", indexed: true  },
       { name: "revealer",       type: "address", indexed: true  },
       { name: "timelockHeader", type: "bytes",   indexed: false },
+    ],
+  },
+  // Stage 2
+  {
+    name: "setRecipientKeys",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "capsuleId",    type: "bytes32"   },
+      { name: "recipients",   type: "address[]" },
+      { name: "encryptedKeys", type: "bytes[]"  },
+    ],
+    outputs: [],
+  },
+  {
+    name: "getRecipientKey",
+    type: "function",
+    stateMutability: "view",
+    inputs: [
+      { name: "capsuleId",  type: "bytes32" },
+      { name: "recipient",  type: "address" },
+    ],
+    outputs: [{ name: "", type: "bytes" }],
+  },
+  {
+    name: "RecipientKeySet",
+    type: "event",
+    inputs: [
+      { name: "capsuleId",  type: "bytes32", indexed: true },
+      { name: "recipient",  type: "address", indexed: true },
+    ],
+  },
+] as const;
+
+// ── KeyRegistry ABI ───────────────────────────────────────────────────────────
+
+export const KEY_REGISTRY_ABI = [
+  {
+    name: "registerKey",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs:  [{ name: "pubkey", type: "bytes" }],
+    outputs: [],
+  },
+  {
+    name: "getKey",
+    type: "function",
+    stateMutability: "view",
+    inputs:  [{ name: "wallet", type: "address" }],
+    outputs: [{ name: "", type: "bytes" }],
+  },
+  {
+    name: "hasKey",
+    type: "function",
+    stateMutability: "view",
+    inputs:  [{ name: "wallet", type: "address" }],
+    outputs: [{ name: "", type: "bool" }],
+  },
+  {
+    name: "KeyRegistered",
+    type: "event",
+    inputs: [
+      { name: "wallet", type: "address", indexed: true  },
+      { name: "pubkey", type: "bytes",   indexed: false },
     ],
   },
 ] as const;
