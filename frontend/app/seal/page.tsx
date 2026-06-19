@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useAccount } from "wagmi";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Lock, LockOpen } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -170,7 +171,7 @@ export default function SealPage() {
             <span className="text-sm text-muted-foreground">days</span>
           </div>
           <p className="mb-3 text-xs text-muted-foreground">
-            You must check in every {dmsInterval} day(s) or the capsule unlocks automatically.
+            You must check in every {dmsInterval} day(s) or the capsule unlocks automatically. Anyone can trigger the reveal once overdue.
           </p>
           <div className="flex items-center gap-3">
             <span className="text-xs text-muted-foreground">Min lock window</span>
@@ -265,7 +266,7 @@ export default function SealPage() {
                   <motion.span
                     animate={{ rotate: 360 }}
                     transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }}
-                    style={{ display: "inline-flex" }}
+                    className="inline-flex"
                   >
                     <LockOpen className="h-4 w-4" />
                   </motion.span>
@@ -290,6 +291,9 @@ export default function SealPage() {
           <ResultField label="Commit Hash"  value={result.commitHash} />
           <ResultField label="Drand Round"  value={String(result.drandRound)} />
           <ResultField label="Tx Hash"      value={result.txHash} />
+          <div className="mt-3">
+            <Link href={`/proof/${result.capsuleId}`} className="text-sm text-indigo-400 hover:text-indigo-300">Go to proof page →</Link>
+          </div>
         </div>
       )}
     </main>
