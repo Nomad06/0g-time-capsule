@@ -3,6 +3,7 @@
 import { useState, useEffect, use } from "react";
 import { useAccount } from "wagmi";
 import Link from "next/link";
+import { toast } from "sonner";
 import { ConnectButton } from "../../../../components/ConnectButton";
 import { Button } from "../../../../components/ui/button";
 import { getVaultInfo, approveReveal, hasApproved, multisigCanReveal } from "../../../../lib/triggers";
@@ -20,7 +21,6 @@ export default function MultiSigPage({ params }: { params: Promise<{ id: string 
   const [canReveal,  setCanReveal]  = useState(false);
   const [loading,    setLoading]    = useState(false);
   const [status,     setStatus]     = useState("");
-  const [error,      setError]      = useState("");
 
   async function load() {
     const v = await getVaultInfo(capsuleId);
@@ -43,29 +43,31 @@ export default function MultiSigPage({ params }: { params: Promise<{ id: string 
   }, [capsuleId, address]);
 
   async function handleApprove() {
-    setLoading(true); setError(""); setStatus("Sending approval tx…");
+    setLoading(true); setStatus("Sending approval tx…");
     try {
       await approveReveal(capsuleId);
       setStatus("Approval confirmed!");
       await load();
-    } catch (e: unknown) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setLoading(false); }
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally { setLoading(false); }
   }
 
   async function handleReveal() {
-    setLoading(true); setError(""); setStatus("Sending reveal tx…");
+    setLoading(true); setStatus("Sending reveal tx…");
     try {
       await revealOnChain(capsuleId);
       setStatus("Capsule revealed! Go to proof page to decrypt.");
-    } catch (e: unknown) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setLoading(false); }
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally { setLoading(false); }
   }
 
   const isSigner  = vault && address && vault.signers.some(s => s.toLowerCase() === address?.toLowerCase());
   const progress  = vault ? vault.approvalCount / vault.threshold : 0;
 
   return (
-    <main className="mx-auto max-w-xl px-6 mt-20">
+    <main className="mx-auto max-w-xl px-4 py-14 sm:px-6">
       <div className="mb-6">
         <Link href={`/proof/${capsuleId}`} className="text-muted-foreground text-sm no-underline">
           ← Back to capsule
@@ -147,7 +149,6 @@ export default function MultiSigPage({ params }: { params: Promise<{ id: string 
           </div>
 
           {status && <p className="text-green-400 mt-3 text-sm">{status}</p>}
-          {error  && <p className="text-red-400 mt-3 text-sm">{error}</p>}
         </>
       )}
     </main>

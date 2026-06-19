@@ -3,6 +3,7 @@
 import { useState, useEffect, use } from "react";
 import { useAccount } from "wagmi";
 import Link from "next/link";
+import { toast } from "sonner";
 import { ConnectButton } from "../../../../components/ConnectButton";
 import { Button } from "../../../../components/ui/button";
 import { getSwitchInfo, checkin, triggerSwitch } from "../../../../lib/triggers";
@@ -18,7 +19,6 @@ export default function DeadManPage({ params }: { params: Promise<{ id: string }
   const [info,    setInfo]    = useState<SwitchInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [status,  setStatus]  = useState("");
-  const [error,   setError]   = useState("");
   const [now,     setNow]     = useState(BigInt(Math.floor(Date.now() / 1000)));
 
   useEffect(() => {
@@ -36,32 +36,35 @@ export default function DeadManPage({ params }: { params: Promise<{ id: string }
   }, [capsuleId]);
 
   async function handleCheckin() {
-    setLoading(true); setError(""); setStatus("Sending check-in tx…");
+    setLoading(true); setStatus("Sending check-in tx…");
     try {
       await checkin(capsuleId);
       setStatus("Check-in confirmed!");
       setInfo(await getSwitchInfo(capsuleId));
-    } catch (e: unknown) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setLoading(false); }
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally { setLoading(false); }
   }
 
   async function handleTrigger() {
-    setLoading(true); setError(""); setStatus("Triggering switch…");
+    setLoading(true); setStatus("Triggering switch…");
     try {
       await triggerSwitch(capsuleId);
       setStatus("Switch triggered — capsule is now revealable.");
       setInfo(await getSwitchInfo(capsuleId));
-    } catch (e: unknown) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setLoading(false); }
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally { setLoading(false); }
   }
 
   async function handleReveal() {
-    setLoading(true); setError(""); setStatus("Sending reveal tx…");
+    setLoading(true); setStatus("Sending reveal tx…");
     try {
       await revealOnChain(capsuleId);
       setStatus("Capsule revealed! Go to proof page to decrypt.");
-    } catch (e: unknown) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setLoading(false); }
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally { setLoading(false); }
   }
 
   const isOwner = info && address && info.owner.toLowerCase() === address.toLowerCase();
@@ -73,7 +76,7 @@ export default function DeadManPage({ params }: { params: Promise<{ id: string }
   const minsLeft   = Math.max(0, Math.floor((remaining % 3600) / 60));
 
   return (
-    <main className="mx-auto max-w-xl px-6 mt-20">
+    <main className="mx-auto max-w-xl px-4 py-14 sm:px-6">
       <div className="mb-6">
         <Link href={`/proof/${capsuleId}`} className="text-muted-foreground text-sm no-underline">
           ← Back to capsule
@@ -151,7 +154,6 @@ export default function DeadManPage({ params }: { params: Promise<{ id: string }
           </div>
 
           {status && <p className="text-green-400 mt-3 text-sm">{status}</p>}
-          {error  && <p className="text-red-400 mt-3 text-sm">{error}</p>}
         </>
       )}
     </main>

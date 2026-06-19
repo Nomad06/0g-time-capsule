@@ -44,37 +44,40 @@ export function HashVerifyAnimation({ plaintext, commitHash, revealedHash, verif
   }, [revealedHash]);
 
   return (
-    <div style={{ marginTop: 32 }}>
+    <div className="mt-8">
 
       {/* Hash reveal animation */}
-      <div style={hashBox}>
-        <p style={label}>Computing keccak256(revealed content)…</p>
-        <code style={{ fontSize: 13, wordBreak: "break-all", color: "#818cf8", letterSpacing: 1 }}>
+      <div className="rounded-[10px] border border-indigo-950 bg-[#0a0a14] p-5">
+        <p className="mb-2 text-[11px] uppercase tracking-[1px] text-muted-foreground/60">
+          Computing keccak256(revealed content)…
+        </p>
+        <code className="break-all text-[13px] tracking-[1px] text-indigo-400">
           {hashVisible || commitHash}
         </code>
 
         {phase !== "hashing" && (
-          <div style={{ marginTop: 16 }}>
-            <p style={label}>Comparing with on-chain commitment…</p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, fontFamily: "monospace" }}>
+          <div className="mt-4">
+            <p className="mb-2 text-[11px] uppercase tracking-[1px] text-muted-foreground/60">
+              Comparing with on-chain commitment…
+            </p>
+            <div className="flex flex-col gap-1.5 font-mono text-xs">
               <HashRow label="Sealed hash  " value={commitHash}  />
               <HashRow label="Revealed hash" value={revealedHash} />
             </div>
 
             {phase === "done" && (
-              <div style={{
-                marginTop: 14, padding: "10px 16px",
-                background: verified ? "#052e16" : "#3b0764",
-                border: `1px solid ${verified ? "#166534" : "#7e22ce"}`,
-                borderRadius: 6, display: "flex", alignItems: "center", gap: 10,
-              }}>
-                <span style={{ fontSize: 18 }}>{verified ? "✓" : "✗"}</span>
+              <div className={`mt-3.5 flex items-center gap-2.5 rounded-md border px-4 py-2.5 ${
+                verified
+                  ? "border-green-800 bg-green-950"
+                  : "border-purple-800 bg-[#3b0764]"
+              }`}>
+                <span className="text-lg">{verified ? "✓" : "✗"}</span>
                 <div>
-                  <p style={{ margin: 0, fontWeight: "bold", color: verified ? "#4ade80" : "#e879f9", fontSize: 14 }}>
+                  <p className={`m-0 text-sm font-bold ${verified ? "text-green-400" : "text-fuchsia-400"}`}>
                     {verified ? "MATCH — content is authentic" : "MISMATCH — content may be tampered"}
                   </p>
                   {verified && sealDate && (
-                    <p style={{ margin: "2px 0 0", color: "#555", fontSize: 12 }}>
+                    <p className="mt-0.5 text-xs text-muted-foreground/50">
                       Proved: this exact text existed on {sealDate.toLocaleString()}
                     </p>
                   )}
@@ -87,15 +90,11 @@ export function HashVerifyAnimation({ plaintext, commitHash, revealedHash, verif
 
       {/* Revealed content */}
       {showContent && (
-        <div style={{
-          marginTop: 24, padding: 28,
-          background: "#050f05",
-          border: "1px solid #14532d",
-          borderRadius: 10,
-          animation: "fadeIn 0.6s ease",
-        }}>
-          <p style={{ ...label, marginBottom: 12 }}>Revealed content</p>
-          <p style={{ whiteSpace: "pre-wrap", lineHeight: 1.8, fontSize: 16, color: "#e5e5e5", margin: 0 }}>
+        <div className="mt-6 animate-[fadeIn_0.6s_ease] rounded-[10px] border border-green-900 bg-[#050f05] p-7">
+          <p className="mb-3 text-[11px] uppercase tracking-[1px] text-muted-foreground/60">
+            Revealed content
+          </p>
+          <p className="m-0 whitespace-pre-wrap text-base leading-[1.8] text-[#e5e5e5]">
             {plaintext}
           </p>
         </div>
@@ -108,17 +107,9 @@ export function HashVerifyAnimation({ plaintext, commitHash, revealedHash, verif
 
 function HashRow({ label: l, value }: { label: string; value: string }) {
   return (
-    <div style={{ display: "flex", gap: 12 }}>
-      <span style={{ color: "#555", minWidth: 120, flexShrink: 0 }}>{l}</span>
-      <span style={{ color: "#818cf8", wordBreak: "break-all" }}>{value}</span>
+    <div className="flex gap-3">
+      <span className="min-w-[120px] shrink-0 text-muted-foreground/50">{l}</span>
+      <span className="break-all text-indigo-400">{value}</span>
     </div>
   );
 }
-
-const hashBox: React.CSSProperties = {
-  padding: 20, background: "#0a0a14", border: "1px solid #1e1b4b", borderRadius: 10,
-};
-
-const label: React.CSSProperties = {
-  color: "#555", fontSize: 11, textTransform: "uppercase", letterSpacing: 1, margin: "0 0 8px",
-};

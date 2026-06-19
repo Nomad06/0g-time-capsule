@@ -105,7 +105,7 @@ export default function GalleryPage() {
                 )}
               >
                 {t.charAt(0).toUpperCase() + t.slice(1)}{" "}
-                <span className="text-muted-foreground/50 text-xs">({counts[t]})</span>
+                <span className="text-muted-foreground/50 text-xs">({loading ? "…" : counts[t]})</span>
               </button>
             ))}
           </div>

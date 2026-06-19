@@ -18,9 +18,9 @@ export function CountdownClock({ unlockDate, isUnlocked }: Props) {
 
   if (isUnlocked) {
     return (
-      <div style={wrapStyle("#14532d", "#166534")}>
-        <span style={{ fontSize: 22, marginRight: 10 }}>🔓</span>
-        <span style={{ color: "#4ade80", fontWeight: "bold", fontSize: 16 }}>Capsule is now unlocked</span>
+      <div className="rounded-[10px] border border-green-800 bg-green-950 p-6 text-center">
+        <span className="mr-2.5 text-[22px]">🔓</span>
+        <span className="text-base font-bold text-green-400">Capsule is now unlocked</span>
       </div>
     );
   }
@@ -32,17 +32,17 @@ export function CountdownClock({ unlockDate, isUnlocked }: Props) {
   const s     = Math.floor((total % 60000) / 1000);
 
   return (
-    <div style={wrapStyle("#0f0f1a", "#1e1b4b")}>
-      <p style={{ color: "#666", fontSize: 11, textTransform: "uppercase", letterSpacing: 1, margin: "0 0 12px" }}>
+    <div className="rounded-[10px] border border-indigo-950 bg-[#0f0f1a] p-6 text-center">
+      <p className="mb-3 text-[11px] uppercase tracking-[1px] text-muted-foreground/60">
         Unlocks in
       </p>
-      <div style={{ display: "flex", gap: 16, justifyContent: "center" }}>
+      <div className="flex justify-center gap-4">
         {d > 0 && <Unit n={d} label="days" />}
         <Unit n={h} label="hours" />
         <Unit n={m} label="min" />
         <Unit n={s} label="sec" />
       </div>
-      <p style={{ color: "#444", fontSize: 12, margin: "12px 0 0" }}>
+      <p className="mt-3 text-xs text-muted-foreground/40">
         {unlockDate.toLocaleString()}
       </p>
     </div>
@@ -51,18 +51,11 @@ export function CountdownClock({ unlockDate, isUnlocked }: Props) {
 
 function Unit({ n, label }: { n: number; label: string }) {
   return (
-    <div style={{ textAlign: "center", minWidth: 48 }}>
-      <div style={{ fontSize: 32, fontWeight: "bold", color: "#a5b4fc", fontVariantNumeric: "tabular-nums" }}>
+    <div className="min-w-[48px] text-center">
+      <div className="text-[32px] font-bold tabular-nums text-indigo-300">
         {String(n).padStart(2, "0")}
       </div>
-      <div style={{ fontSize: 10, color: "#555", textTransform: "uppercase", letterSpacing: 1 }}>{label}</div>
+      <div className="text-[10px] uppercase tracking-[1px] text-muted-foreground/60">{label}</div>
     </div>
   );
-}
-
-function wrapStyle(bg: string, border: string): React.CSSProperties {
-  return {
-    padding: 24, background: bg, border: `1px solid ${border}`,
-    borderRadius: 10, textAlign: "center",
-  };
 }
