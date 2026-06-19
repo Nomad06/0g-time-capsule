@@ -11,38 +11,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ConnectButton } from "@/components/ConnectButton";
-import { cn } from "@/lib/utils";
 import { sealCapsule } from "@/lib/capsule";
-import { getEncryptionKey } from "@/lib/contract";
 import { TriggerType } from "@/lib/types";
-import type { SealResult, RecipientParam } from "@/lib/types";
-
-const TRIGGER_OPTS = [
-  { value: TriggerType.TIME,     label: "⏰ Time lock",        desc: "Unlocks at a set time" },
-  { value: TriggerType.DEADMAN,  label: "💀 Dead Man's Switch", desc: "Unlocks if owner stops checking in" },
-  { value: TriggerType.MULTISIG, label: "🗳️ Multi-Sig",        desc: "Unlocks when M-of-N signers approve" },
-] as const;
+import type { SealResult } from "@/lib/types";
 
 export default function SealPage() {
-  const { isConnected, address } = useAccount();
+  const { isConnected } = useAccount();
   const router = useRouter();
 
-  const [message,     setMessage]     = useState("");
-  const [minutes,     setMinutes]     = useState(2);
-  const [recipInput,  setRecipInput]  = useState("");
-  const [triggerType, setTriggerType] = useState<TriggerType>(TriggerType.TIME);
-  const [dmsInterval, setDmsInterval] = useState(1);
-  const [msSigners,   setMsSigners]   = useState("");
-  const [msThreshold, setMsThreshold] = useState(2);
-
+  const [message,   setMessage]   = useState("");
+  const [minutes,   setMinutes]   = useState(2);
   const [result,    setResult]    = useState<SealResult | null>(null);
   const [status,    setStatus]    = useState("");
   const [loading,   setLoading]   = useState(false);
   const [sealed,    setSealed]    = useState(false);
-
-  const msSignerCount = msSigners
-    .split(/[\s,]+/)
-    .filter(s => s.startsWith("0x") && s.length === 42).length;
 
   async function handleSeal() {
     if (!message.trim()) { toast.error("Message is empty"); return; }
@@ -51,43 +33,13 @@ export default function SealPage() {
 
     try {
       const unlockTime = new Date(Date.now() + minutes * 60 * 1000);
-      const rawAddresses = recipInput
-        .split(/[\s,]+/)
-        .map(s => s.trim())
-        .filter(s => s.startsWith("0x") && s.length === 42) as `0x${string}`[];
-
-      let recipients: RecipientParam[] = [];
-      if (rawAddresses.length > 0) {
-        setStatus("Fetching recipient keys…");
-        recipients = await Promise.all(
-          rawAddresses.map(async (addr) => {
-            const pubkeyHex = await getEncryptionKey(addr);
-            if (!pubkeyHex || pubkeyHex === "0x")
-              throw new Error(`${addr} has not registered an encryption key.`);
-            return { address: addr, pubkey: new Uint8Array(Buffer.from(pubkeyHex.slice(2), "hex")) };
-          })
-        );
-      }
-
-      const multisigSigners = msSigners
-        .split(/[\s,]+/)
-        .map(s => s.trim())
-        .filter(s => s.startsWith("0x") && s.length === 42) as `0x${string}`[];
-
-      setStatus(
-        triggerType === TriggerType.TIME    ? "Encrypting + uploading to 0G…" :
-        triggerType === TriggerType.DEADMAN ? "Sealing + arming dead man's switch…" :
-        "Sealing + creating multi-sig vault…"
-      );
+      setStatus("Encrypting + uploading to 0G…");
 
       const res = await sealCapsule({
-        plaintext:  message,
+        plaintext:   message,
         unlockTime,
-        recipients,
-        triggerType,
-        triggerContract: undefined,
-        deadman:  triggerType === TriggerType.DEADMAN ? { intervalDays: dmsInterval } : undefined,
-        multisig: triggerType === TriggerType.MULTISIG ? { signers: multisigSigners, threshold: msThreshold } : undefined,
+        recipients:  [],
+        triggerType: TriggerType.TIME,
       });
 
       setResult(res);
@@ -103,7 +55,7 @@ export default function SealPage() {
     <main className="mx-auto max-w-xl px-4 py-14 sm:px-6">
       <h1 className="mb-1 text-2xl font-bold">Seal a Capsule</h1>
       <p className="mb-8 text-sm text-muted-foreground">
-        Encrypted on-chain. Decryptable only when the unlock condition is met.
+        Encrypted on-chain. Decryptable only when the unlock time is reached.
       </p>
 
       {!isConnected && <div className="mb-6"><ConnectButton /></div>}
@@ -119,120 +71,18 @@ export default function SealPage() {
         />
       </div>
 
-      {/* Trigger selector */}
-      <div className="mb-5">
-        <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Unlock trigger</p>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          {TRIGGER_OPTS.map(opt => (
-            <button
-              key={opt.value}
-              onClick={() => setTriggerType(opt.value)}
-              aria-pressed={triggerType === opt.value}
-              className={cn(
-                "rounded-lg border p-3 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                triggerType === opt.value
-                  ? "border-indigo-700 bg-indigo-950/40 text-indigo-300"
-                  : "border-border bg-card text-muted-foreground hover:border-indigo-900 hover:text-foreground"
-              )}
-            >
-              <div className="font-semibold">{opt.label}</div>
-              <div className="mt-0.5 text-xs opacity-60">{opt.desc}</div>
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* Time lock config */}
-      {triggerType === TriggerType.TIME && (
-        <div className="mb-5 flex items-center gap-3">
-          <span className="text-sm text-muted-foreground">Unlock in</span>
-          <Input
-            type="number"
-            min={1}
-            value={minutes}
-            onChange={(e) => setMinutes(Number(e.target.value))}
-            disabled={loading}
-            className="w-24"
-          />
-          <span className="text-sm text-muted-foreground">minutes</span>
-        </div>
-      )}
-
-      {/* Dead Man's Switch config */}
-      {triggerType === TriggerType.DEADMAN && (
-        <div className="mb-5 rounded-lg border border-amber-900/50 bg-amber-950/10 p-4">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-amber-600">Dead Man&apos;s Switch</p>
-          <div className="mb-3 flex items-center gap-3">
-            <span className="text-sm text-muted-foreground">Check-in interval</span>
-            <Input type="number" min={1} value={dmsInterval}
-              onChange={(e) => setDmsInterval(Number(e.target.value))}
-              disabled={loading} className="w-20"
-            />
-            <span className="text-sm text-muted-foreground">days</span>
-          </div>
-          <p className="mb-3 text-xs text-muted-foreground">
-            You must check in every {dmsInterval} day(s) or the capsule unlocks automatically. Anyone can trigger the reveal once overdue.
-          </p>
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-muted-foreground">Min lock window</span>
-            <Input type="number" min={1} value={minutes}
-              onChange={(e) => setMinutes(Number(e.target.value))}
-              disabled={loading} className="w-20"
-            />
-            <span className="text-xs text-muted-foreground">min</span>
-          </div>
-        </div>
-      )}
-
-      {/* Multi-sig config */}
-      {triggerType === TriggerType.MULTISIG && (
-        <div className="mb-5 rounded-lg border border-indigo-900/50 bg-indigo-950/10 p-4">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-indigo-500">Multi-Sig</p>
-          <label className="mb-1 block text-xs text-muted-foreground">Signers (comma-separated addresses)</label>
-          <Textarea
-            rows={3}
-            placeholder="0xAbc…, 0xDef…"
-            value={msSigners}
-            onChange={(e) => setMsSigners(e.target.value)}
-            disabled={loading}
-            className="mb-3 font-mono text-xs"
-          />
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-muted-foreground">Threshold</span>
-            <Input type="number" min={1} value={msThreshold}
-              onChange={(e) => setMsThreshold(Number(e.target.value))}
-              disabled={loading} className="w-20"
-            />
-            <span className="text-sm text-muted-foreground">
-              of {msSignerCount} signer{msSignerCount !== 1 ? "s" : ""}
-            </span>
-          </div>
-          <div className="mt-3 flex items-center gap-3">
-            <span className="text-xs text-muted-foreground">Min lock window</span>
-            <Input type="number" min={1} value={minutes}
-              onChange={(e) => setMinutes(Number(e.target.value))}
-              disabled={loading} className="w-20"
-            />
-            <span className="text-xs text-muted-foreground">min</span>
-          </div>
-        </div>
-      )}
-
-      {/* Recipients */}
-      <div className="mb-6">
-        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-          Recipients <span className="text-muted-foreground/50">(optional)</span>
-        </label>
+      <div className="mb-6 flex items-center gap-3">
+        <span className="text-sm text-muted-foreground">Unlock in</span>
         <Input
-          placeholder="0xAbc…, 0xDef… (comma-separated)"
-          value={recipInput}
-          onChange={(e) => setRecipInput(e.target.value)}
+          type="number"
+          min={1}
+          value={minutes}
+          onChange={(e) => setMinutes(Number(e.target.value))}
           disabled={loading}
+          className="w-24"
         />
-        <p className="mt-1.5 text-xs text-muted-foreground/60">
-          Each address must have registered a key at{" "}
-          <a href="/register" className="text-indigo-400 hover:text-indigo-300">/register</a>.
-        </p>
+        <span className="text-sm text-muted-foreground">minutes</span>
       </div>
 
       {/* Submit + animation */}
