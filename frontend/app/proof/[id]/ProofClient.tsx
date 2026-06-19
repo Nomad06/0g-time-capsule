@@ -9,6 +9,7 @@ import { revealCapsule, decryptRevealed, decryptAsRecipient } from "../../../lib
 import { loadPrivKeyFromStorage, hasSavedPrivKey } from "../../../lib/ecies";
 import { HashVerifyAnimation } from "../../../components/HashVerifyAnimation";
 import { CountdownClock } from "../../../components/CountdownClock";
+import { Button } from "../../../components/ui/button";
 import type { OnChainCapsule, RevealResult } from "../../../lib/types";
 
 interface Props {
@@ -94,38 +95,37 @@ export function ProofClient({ capsuleId }: Props) {
   const sealDate        = capsule ? new Date(Number(capsule.createdAt) * 1000) : null;
 
   return (
-    <main style={{ maxWidth: 680, margin: "60px auto", padding: "0 24px" }}>
+    <main className="mx-auto max-w-2xl px-4 py-12 sm:px-6">
 
       {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 32 }}>
+      <div className="flex justify-between items-start mb-8">
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-            <span style={{
-              padding: "3px 10px", borderRadius: 4, fontSize: 11, fontWeight: "bold", letterSpacing: 1,
-              background: alreadyRevealed ? "#14532d" : "#1e1b4b",
-              color:      alreadyRevealed ? "#4ade80"  : "#a5b4fc",
-              border:     `1px solid ${alreadyRevealed ? "#166534" : "#3730a3"}`,
-            }}>
+          <div className="flex items-center gap-2.5 mb-1.5">
+            <span className={`px-2.5 py-0.5 rounded text-[11px] font-bold tracking-widest border ${
+              alreadyRevealed
+                ? "bg-green-950 text-green-400 border-green-800"
+                : "bg-indigo-950 text-indigo-300 border-indigo-800"
+            }`}>
               {alreadyRevealed ? "REVEALED" : "SEALED"}
             </span>
             {unlocked && !alreadyRevealed && (
-              <span style={{ padding: "3px 10px", borderRadius: 4, fontSize: 11, background: "#422006", color: "#fb923c", border: "1px solid #78350f" }}>
+              <span className="px-2.5 py-0.5 rounded text-[11px] bg-orange-950 text-orange-400 border border-orange-900">
                 UNLOCKED
               </span>
             )}
           </div>
-          <h1 style={{ fontSize: 26, margin: 0 }}>Time Capsule</h1>
-          <p style={{ color: "#555", fontSize: 12, margin: "4px 0 0", wordBreak: "break-all" }}>{capsuleId}</p>
+          <h1 className="text-2xl font-semibold m-0">Time Capsule</h1>
+          <p className="text-muted-foreground text-xs mt-1 break-all">{capsuleId}</p>
         </div>
-        <button onClick={copyLink} style={ghostBtn}>
+        <Button variant="outline" size="sm" onClick={copyLink}>
           {copied ? "✓ Copied" : "Share link"}
-        </button>
+        </Button>
       </div>
 
       {/* Proof block — visible to ANYONE, no wallet needed */}
       {capsule && (
-        <div style={proofBox}>
-          <p style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 1, margin: "0 0 16px" }}>
+        <div className="rounded-xl border border-border bg-card p-6 mb-2">
+          <p className="text-muted-foreground text-[11px] uppercase tracking-widest mb-4">
             On-chain commitment
           </p>
           <ProofRow label="Sealed"       value={sealDate?.toLocaleString() ?? "—"} />
@@ -134,8 +134,8 @@ export function ProofClient({ capsuleId }: Props) {
           <ProofRow label="Storage root" value={capsule.storageRoot} mono />
           <ProofRow label="Owner"        value={capsule.owner} mono />
 
-          <p style={{ color: "#555", fontSize: 12, marginTop: 16, lineHeight: 1.6 }}>
-            The commit hash is <strong style={{ color: "#888" }}>keccak256(plaintext)</strong> stored on 0G Chain at seal time.
+          <p className="text-muted-foreground text-xs mt-4 leading-relaxed">
+            The commit hash is <strong className="text-muted-foreground">keccak256(plaintext)</strong> stored on 0G Chain at seal time.
             When revealed, anyone can verify the content matches — proving it was written before the seal date.
           </p>
         </div>
@@ -143,26 +143,26 @@ export function ProofClient({ capsuleId }: Props) {
 
       {/* Countdown (shown while sealed) */}
       {capsule && !alreadyRevealed && unlockDate && (
-        <div style={{ margin: "32px 0" }}>
+        <div className="my-8">
           <CountdownClock unlockDate={unlockDate} isUnlocked={unlocked} />
         </div>
       )}
 
       {/* Stage 3: trigger management links */}
       {capsule && capsule.triggerType === 1 && (
-        <div style={{ margin: "16px 0", padding: "12px 16px", background: "#0d0600", border: "1px solid #78350f", borderRadius: 8 }}>
-          <span style={{ color: "#fb923c", fontSize: 13, fontWeight: "bold" }}>Dead Man&apos;s Switch</span>
+        <div className="my-4 px-4 py-3 bg-orange-950/30 border border-orange-900 rounded-lg">
+          <span className="text-orange-400 text-sm font-bold">Dead Man&apos;s Switch</span>
           {" — "}
-          <Link href={`/triggers/deadman/${capsuleId}`} style={{ color: "#818cf8", fontSize: 13 }}>
+          <Link href={`/triggers/deadman/${capsuleId}`} className="text-indigo-300 text-sm">
             Manage switch (check in / trigger) →
           </Link>
         </div>
       )}
       {capsule && capsule.triggerType === 3 && (
-        <div style={{ margin: "16px 0", padding: "12px 16px", background: "#0a0a14", border: "1px solid #1e1b4b", borderRadius: 8 }}>
-          <span style={{ color: "#a5b4fc", fontSize: 13, fontWeight: "bold" }}>Multi-Sig Reveal</span>
+        <div className="my-4 px-4 py-3 bg-indigo-950/30 border border-indigo-900 rounded-lg">
+          <span className="text-indigo-300 text-sm font-bold">Multi-Sig Reveal</span>
           {" — "}
-          <Link href={`/triggers/multisig/${capsuleId}`} style={{ color: "#818cf8", fontSize: 13 }}>
+          <Link href={`/triggers/multisig/${capsuleId}`} className="text-indigo-300 text-sm">
             Manage approvals →
           </Link>
         </div>
@@ -170,51 +170,51 @@ export function ProofClient({ capsuleId }: Props) {
 
       {/* Actions */}
       {!result && capsule && (
-        <div style={{ margin: "24px 0" }}>
+        <div className="my-6">
           {!isConnected && !alreadyRevealed && (
-            <p style={{ color: "#666", fontSize: 14 }}>Connect wallet to reveal (if you&apos;re the owner).</p>
+            <p className="text-muted-foreground text-sm">Connect wallet to reveal (if you&apos;re the owner).</p>
           )}
 
           {isConnected && unlocked && !alreadyRevealed && (
-            <button onClick={handleReveal} disabled={loading} style={primaryBtn}>
+            <Button onClick={handleReveal} disabled={loading}>
               {loading ? status : "Reveal & Decrypt"}
-            </button>
+            </Button>
           )}
 
           {alreadyRevealed && isConnected && isOwner && (
-            <button onClick={handleDecrypt} disabled={loading} style={{ ...primaryBtn, background: "#166534" }}>
+            <Button onClick={handleDecrypt} disabled={loading} className="bg-green-900 hover:bg-green-800">
               {loading ? status : "Decrypt (sign to read)"}
-            </button>
+            </Button>
           )}
 
           {/* Stage 2: recipient decrypt — no signing needed, uses local ECIES key */}
           {alreadyRevealed && isConnected && isRecipient && !isOwner && (
             <div>
-              <button
+              <Button
                 onClick={handleRecipientDecrypt}
                 disabled={loading || !hasLocalKey}
-                style={{ ...primaryBtn, background: hasLocalKey ? "#1d4ed8" : "#1a1a1a" }}
+                className={hasLocalKey ? "bg-blue-700 hover:bg-blue-600" : "bg-muted text-muted-foreground"}
               >
                 {loading ? status : "Decrypt as recipient"}
-              </button>
+              </Button>
               {!hasLocalKey && (
-                <p style={{ color: "#f59e0b", fontSize: 12, marginTop: 6 }}>
+                <p className="text-amber-400 text-xs mt-1.5">
                   No local encryption key found.{" "}
-                  <a href="/register" style={{ color: "#818cf8" }}>Register or import your key →</a>
+                  <a href="/register" className="text-indigo-300">Register or import your key →</a>
                 </p>
               )}
             </div>
           )}
 
           {alreadyRevealed && !isConnected && (
-            <p style={{ color: "#666", fontSize: 14 }}>
+            <p className="text-muted-foreground text-sm">
               Capsule revealed. Connect wallet to decrypt.
             </p>
           )}
         </div>
       )}
 
-      {error && <p style={{ color: "#f87171", marginTop: 12, fontSize: 14 }}>{error}</p>}
+      {error && <p className="text-red-400 mt-3 text-sm">{error}</p>}
 
       {/* Reveal result with animation */}
       {result && (
@@ -227,10 +227,10 @@ export function ProofClient({ capsuleId }: Props) {
         />
       )}
 
-      <div style={{ marginTop: 48, paddingTop: 24, borderTop: "1px solid #1a1a1a" }}>
-        <Link href="/gallery" style={{ color: "#555", fontSize: 13, textDecoration: "none" }}>← All capsules</Link>
+      <div className="mt-12 pt-6 border-t border-border">
+        <Link href="/gallery" className="text-muted-foreground text-sm no-underline">← All capsules</Link>
         {" · "}
-        <Link href="/seal" style={{ color: "#555", fontSize: 13, textDecoration: "none" }}>Create your own</Link>
+        <Link href="/seal" className="text-muted-foreground text-sm no-underline">Create your own</Link>
       </div>
     </main>
   );
@@ -240,32 +240,11 @@ function ProofRow({ label, value, mono, highlight }: {
   label: string; value: string; mono?: boolean; highlight?: boolean;
 }) {
   return (
-    <div style={{ display: "flex", gap: 12, marginBottom: 10, alignItems: "flex-start", fontSize: 13 }}>
-      <span style={{ color: "#666", minWidth: 100, flexShrink: 0 }}>{label}</span>
-      <span style={{
-        fontFamily:  mono ? "monospace" : "inherit",
-        wordBreak:   "break-all",
-        color:       highlight ? "#818cf8" : "#ccc",
-        fontWeight:  highlight ? "bold" : "normal",
-      }}>
+    <div className="flex gap-3 mb-2.5 items-start text-sm">
+      <span className="text-muted-foreground min-w-[100px] shrink-0">{label}</span>
+      <span className={`break-all ${mono ? "font-mono" : ""} ${highlight ? "text-indigo-300 font-bold" : "text-foreground/80"}`}>
         {value}
       </span>
     </div>
   );
 }
-
-const proofBox: React.CSSProperties = {
-  padding: 24, background: "#0d0d0d", border: "1px solid #1e1e1e",
-  borderRadius: 10, marginBottom: 8,
-};
-
-const ghostBtn: React.CSSProperties = {
-  padding: "7px 14px", background: "transparent", color: "#666",
-  border: "1px solid #333", borderRadius: 6, fontSize: 12, cursor: "pointer",
-  whiteSpace: "nowrap",
-};
-
-const primaryBtn: React.CSSProperties = {
-  padding: "12px 32px", background: "#4f46e5", color: "#fff",
-  border: "none", borderRadius: 8, fontSize: 15, cursor: "pointer",
-};

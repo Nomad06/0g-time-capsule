@@ -4,8 +4,10 @@ import { useState, useEffect, use } from "react";
 import { useAccount } from "wagmi";
 import Link from "next/link";
 import { ConnectButton } from "../../../../components/ConnectButton";
+import { Button } from "../../../../components/ui/button";
 import { getSwitchInfo, checkin, triggerSwitch } from "../../../../lib/triggers";
 import { revealOnChain } from "../../../../lib/contract";
+import { cn } from "../../../../lib/utils";
 import type { SwitchInfo } from "../../../../lib/types";
 
 export default function DeadManPage({ params }: { params: Promise<{ id: string }> }) {
@@ -71,21 +73,21 @@ export default function DeadManPage({ params }: { params: Promise<{ id: string }
   const minsLeft   = Math.max(0, Math.floor((remaining % 3600) / 60));
 
   return (
-    <main style={{ maxWidth: 600, margin: "80px auto", padding: "0 24px" }}>
-      <div style={{ marginBottom: 24 }}>
-        <Link href={`/proof/${capsuleId}`} style={{ color: "#555", fontSize: 13, textDecoration: "none" }}>
+    <main className="mx-auto max-w-xl px-6 mt-20">
+      <div className="mb-6">
+        <Link href={`/proof/${capsuleId}`} className="text-muted-foreground text-sm no-underline">
           ← Back to capsule
         </Link>
       </div>
 
-      <h1 style={{ fontSize: 24, marginBottom: 6 }}>Dead Man&apos;s Switch</h1>
-      <p style={{ color: "#666", fontSize: 13, wordBreak: "break-all", marginBottom: 28 }}>{capsuleId}</p>
+      <h1 className="text-2xl font-semibold mb-1.5">Dead Man&apos;s Switch</h1>
+      <p className="text-muted-foreground text-sm break-all mb-7">{capsuleId}</p>
 
-      {!isConnected && <div style={{ marginBottom: 20 }}><ConnectButton /></div>}
+      {!isConnected && <div className="mb-5"><ConnectButton /></div>}
 
       {!info && (
-        <div style={infoBox}>
-          <p style={{ color: "#666", margin: 0 }}>
+        <div className="rounded-xl border border-border bg-card p-5 mb-2">
+          <p className="text-muted-foreground m-0">
             Switch not armed yet. Seal this capsule with the Dead Man&apos;s Switch trigger to activate.
           </p>
         </div>
@@ -94,19 +96,19 @@ export default function DeadManPage({ params }: { params: Promise<{ id: string }
       {info && (
         <>
           {/* Status card */}
-          <div style={{
-            ...infoBox,
-            borderColor: info.triggered ? "#7e22ce" : overdue ? "#78350f" : "#166534",
-            background: info.triggered ? "#0d0620" : overdue ? "#0d0800" : "#050f05",
-          }}>
-            <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 14 }}>
-              <span style={{ fontSize: 22 }}>
+          <div className={cn(
+            "rounded-xl border p-5 mb-2",
+            info.triggered ? "border-purple-900 bg-purple-950/20" :
+            overdue        ? "border-amber-900 bg-amber-950/10"   :
+                             "border-green-900 bg-green-950/10"
+          )}>
+            <div className="flex gap-2.5 items-center mb-3.5">
+              <span className="text-[22px]">
                 {info.triggered ? "💀" : overdue ? "⚠️" : "💚"}
               </span>
-              <span style={{
-                fontWeight: "bold", fontSize: 16,
-                color: info.triggered ? "#e879f9" : overdue ? "#fb923c" : "#4ade80",
-              }}>
+              <span className={`font-bold text-base ${
+                info.triggered ? "text-fuchsia-400" : overdue ? "text-orange-400" : "text-green-400"
+              }`}>
                 {info.triggered ? "TRIGGERED" : overdue ? "OVERDUE — anyone can trigger" : "ALIVE"}
               </span>
             </div>
@@ -118,11 +120,11 @@ export default function DeadManPage({ params }: { params: Promise<{ id: string }
             <Row label="Revealed"        value={info.revealed ? "Yes" : "No"} />
 
             {!info.triggered && !overdue && remaining > 0 && (
-              <div style={{ marginTop: 14, padding: "10px 14px", background: "#0a0a14", borderRadius: 6 }}>
-                <p style={{ color: "#555", fontSize: 11, textTransform: "uppercase", letterSpacing: 1, margin: "0 0 8px" }}>
+              <div className="mt-3.5 px-3.5 py-2.5 bg-card rounded-md">
+                <p className="text-muted-foreground text-[11px] uppercase tracking-widest mb-2">
                   Time until deadline
                 </p>
-                <span style={{ fontSize: 22, fontWeight: "bold", color: "#a5b4fc", fontVariantNumeric: "tabular-nums" }}>
+                <span className="text-[22px] font-bold text-indigo-300 tabular-nums">
                   {daysLeft}d {String(hoursLeft).padStart(2, "0")}h {String(minsLeft).padStart(2, "0")}m
                 </span>
               </div>
@@ -130,28 +132,26 @@ export default function DeadManPage({ params }: { params: Promise<{ id: string }
           </div>
 
           {/* Actions */}
-          <div style={{ marginTop: 20, display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <div className="mt-5 flex gap-3 flex-wrap">
             {isConnected && isOwner && !info.triggered && (
-              <button onClick={handleCheckin} disabled={loading} style={primaryBtn}>
+              <Button onClick={handleCheckin} disabled={loading}>
                 {loading && status.includes("check") ? status : "Check In"}
-              </button>
+              </Button>
             )}
             {isConnected && overdue && !info.triggered && (
-              <button onClick={handleTrigger} disabled={loading}
-                style={{ ...primaryBtn, background: "#7e22ce" }}>
+              <Button onClick={handleTrigger} disabled={loading} className="bg-purple-800 hover:bg-purple-700">
                 {loading && status.includes("Trigger") ? status : "Trigger Switch"}
-              </button>
+              </Button>
             )}
             {isConnected && canRevealNow && !info.revealed && (
-              <button onClick={handleReveal} disabled={loading}
-                style={{ ...primaryBtn, background: "#166534" }}>
+              <Button onClick={handleReveal} disabled={loading} className="bg-green-900 hover:bg-green-800">
                 {loading && status.includes("reveal") ? status : "Reveal Capsule"}
-              </button>
+              </Button>
             )}
           </div>
 
-          {status && <p style={{ color: "#4ade80", marginTop: 12, fontSize: 14 }}>{status}</p>}
-          {error  && <p style={{ color: "#f87171", marginTop: 12, fontSize: 14 }}>{error}</p>}
+          {status && <p className="text-green-400 mt-3 text-sm">{status}</p>}
+          {error  && <p className="text-red-400 mt-3 text-sm">{error}</p>}
         </>
       )}
     </main>
@@ -160,21 +160,11 @@ export default function DeadManPage({ params }: { params: Promise<{ id: string }
 
 function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div style={{ display: "flex", gap: 10, marginBottom: 8, fontSize: 13 }}>
-      <span style={{ color: "#666", minWidth: 120, flexShrink: 0 }}>{label}</span>
-      <span style={{ fontFamily: mono ? "monospace" : "inherit", wordBreak: "break-all", color: "#ccc" }}>
+    <div className="flex gap-2.5 mb-2 text-sm">
+      <span className="text-muted-foreground min-w-[120px] shrink-0">{label}</span>
+      <span className={`break-all text-foreground/80 ${mono ? "font-mono" : ""}`}>
         {value}
       </span>
     </div>
   );
 }
-
-const infoBox: React.CSSProperties = {
-  padding: 20, background: "#0d0d0d", border: "1px solid #1e1e1e",
-  borderRadius: 10, marginBottom: 8,
-};
-
-const primaryBtn: React.CSSProperties = {
-  padding: "11px 24px", background: "#4f46e5", color: "#fff",
-  border: "none", borderRadius: 8, fontSize: 14, cursor: "pointer",
-};

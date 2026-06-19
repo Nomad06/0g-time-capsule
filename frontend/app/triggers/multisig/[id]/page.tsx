@@ -4,8 +4,10 @@ import { useState, useEffect, use } from "react";
 import { useAccount } from "wagmi";
 import Link from "next/link";
 import { ConnectButton } from "../../../../components/ConnectButton";
+import { Button } from "../../../../components/ui/button";
 import { getVaultInfo, approveReveal, hasApproved, multisigCanReveal } from "../../../../lib/triggers";
 import { revealOnChain } from "../../../../lib/contract";
+import { cn } from "../../../../lib/utils";
 import type { VaultInfo } from "../../../../lib/types";
 
 export default function MultiSigPage({ params }: { params: Promise<{ id: string }> }) {
@@ -63,21 +65,21 @@ export default function MultiSigPage({ params }: { params: Promise<{ id: string 
   const progress  = vault ? vault.approvalCount / vault.threshold : 0;
 
   return (
-    <main style={{ maxWidth: 600, margin: "80px auto", padding: "0 24px" }}>
-      <div style={{ marginBottom: 24 }}>
-        <Link href={`/proof/${capsuleId}`} style={{ color: "#555", fontSize: 13, textDecoration: "none" }}>
+    <main className="mx-auto max-w-xl px-6 mt-20">
+      <div className="mb-6">
+        <Link href={`/proof/${capsuleId}`} className="text-muted-foreground text-sm no-underline">
           ← Back to capsule
         </Link>
       </div>
 
-      <h1 style={{ fontSize: 24, marginBottom: 6 }}>Multi-Sig Reveal</h1>
-      <p style={{ color: "#666", fontSize: 13, wordBreak: "break-all", marginBottom: 28 }}>{capsuleId}</p>
+      <h1 className="text-2xl font-semibold mb-1.5">Multi-Sig Reveal</h1>
+      <p className="text-muted-foreground text-sm break-all mb-7">{capsuleId}</p>
 
-      {!isConnected && <div style={{ marginBottom: 20 }}><ConnectButton /></div>}
+      {!isConnected && <div className="mb-5"><ConnectButton /></div>}
 
       {!vault && (
-        <div style={infoBox}>
-          <p style={{ color: "#666", margin: 0 }}>
+        <div className="rounded-xl border border-border bg-card p-5 mb-2">
+          <p className="text-muted-foreground m-0">
             No vault found for this capsule. Seal with Multi-sig trigger to create one.
           </p>
         </div>
@@ -85,12 +87,11 @@ export default function MultiSigPage({ params }: { params: Promise<{ id: string 
 
       {vault && (
         <>
-          <div style={{
-            ...infoBox,
-            borderColor: canReveal ? "#166534" : "#1e1b4b",
-            background:  canReveal ? "#050f05" : "#0a0a14",
-          }}>
-            <p style={{ color: "#555", fontSize: 11, textTransform: "uppercase", letterSpacing: 1, margin: "0 0 16px" }}>
+          <div className={cn(
+            "rounded-xl border p-5 mb-2",
+            canReveal ? "border-green-900 bg-green-950/10" : "border-indigo-900 bg-indigo-950/20"
+          )}>
+            <p className="text-muted-foreground text-[11px] uppercase tracking-widest mb-4">
               Vault status
             </p>
 
@@ -100,24 +101,20 @@ export default function MultiSigPage({ params }: { params: Promise<{ id: string 
             <Row label="Revealed"  value={vault.revealed ? "Yes" : "No"} />
 
             {/* Progress bar */}
-            <div style={{ marginTop: 16, marginBottom: 16 }}>
-              <div style={{
-                height: 8, background: "#1a1a1a", borderRadius: 4, overflow: "hidden",
-              }}>
-                <div style={{
-                  height: "100%", width: `${Math.min(100, progress * 100)}%`,
-                  background: canReveal ? "#4ade80" : "#4f46e5",
-                  transition: "width 0.4s",
-                  borderRadius: 4,
-                }} />
+            <div className="mt-4 mb-4">
+              <div className="h-2 rounded-full bg-secondary overflow-hidden">
+                <div
+                  className={cn("h-full rounded-full transition-all duration-500", canReveal ? "bg-green-500" : "bg-primary")}
+                  style={{ width: `${Math.min(100, progress * 100)}%` }}
+                />
               </div>
-              <p style={{ color: canReveal ? "#4ade80" : "#666", fontSize: 12, margin: "6px 0 0" }}>
+              <p className={`text-xs mt-1.5 ${canReveal ? "text-green-400" : "text-muted-foreground"}`}>
                 {canReveal ? "Threshold reached — ready to reveal" : `${vault.threshold - vault.approvalCount} more approval(s) needed`}
               </p>
             </div>
 
             {/* Signer list */}
-            <p style={{ color: "#555", fontSize: 11, textTransform: "uppercase", letterSpacing: 1, margin: "0 0 8px" }}>
+            <p className="text-muted-foreground text-[11px] uppercase tracking-widest mb-2">
               Signers
             </p>
             {vault.signers.map((s, i) => (
@@ -131,27 +128,26 @@ export default function MultiSigPage({ params }: { params: Promise<{ id: string 
           </div>
 
           {/* Actions */}
-          <div style={{ marginTop: 20, display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <div className="mt-5 flex gap-3 flex-wrap">
             {isConnected && isSigner && !approved && !vault.revealed && (
-              <button onClick={handleApprove} disabled={loading} style={primaryBtn}>
+              <Button onClick={handleApprove} disabled={loading}>
                 {loading && status.includes("Approv") ? status : "Approve Reveal"}
-              </button>
+              </Button>
             )}
             {approved && !vault.revealed && (
-              <span style={{ padding: "11px 0", color: "#4ade80", fontSize: 14 }}>
+              <span className="py-2.5 text-green-400 text-sm">
                 ✓ You have approved
               </span>
             )}
             {isConnected && canReveal && !vault.revealed && (
-              <button onClick={handleReveal} disabled={loading}
-                style={{ ...primaryBtn, background: "#166534" }}>
+              <Button onClick={handleReveal} disabled={loading} className="bg-green-900 hover:bg-green-800">
                 {loading && status.includes("reveal") ? status : "Reveal Capsule"}
-              </button>
+              </Button>
             )}
           </div>
 
-          {status && <p style={{ color: "#4ade80", marginTop: 12, fontSize: 14 }}>{status}</p>}
-          {error  && <p style={{ color: "#f87171", marginTop: 12, fontSize: 14 }}>{error}</p>}
+          {status && <p className="text-green-400 mt-3 text-sm">{status}</p>}
+          {error  && <p className="text-red-400 mt-3 text-sm">{error}</p>}
         </>
       )}
     </main>
@@ -160,9 +156,9 @@ export default function MultiSigPage({ params }: { params: Promise<{ id: string 
 
 function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div style={{ display: "flex", gap: 10, marginBottom: 8, fontSize: 13 }}>
-      <span style={{ color: "#666", minWidth: 120, flexShrink: 0 }}>{label}</span>
-      <span style={{ fontFamily: mono ? "monospace" : "inherit", wordBreak: "break-all", color: "#ccc" }}>
+    <div className="flex gap-2.5 mb-2 text-sm">
+      <span className="text-muted-foreground min-w-[120px] shrink-0">{label}</span>
+      <span className={`break-all text-foreground/80 ${mono ? "font-mono" : ""}`}>
         {value}
       </span>
     </div>
@@ -171,20 +167,10 @@ function Row({ label, value, mono }: { label: string; value: string; mono?: bool
 
 function SignerRow({ index, address, isYou }: { index: number; address: string; isYou: boolean }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, fontSize: 12 }}>
-      <span style={{ color: "#444", minWidth: 20 }}>{index}.</span>
-      <code style={{ color: isYou ? "#a5b4fc" : "#888", wordBreak: "break-all" }}>{address}</code>
-      {isYou && <span style={{ color: "#a5b4fc", fontSize: 11 }}>(you)</span>}
+    <div className="flex items-center gap-2.5 mb-1.5 text-xs">
+      <span className="text-muted-foreground/60 min-w-[20px]">{index}.</span>
+      <code className={`break-all ${isYou ? "text-indigo-300" : "text-muted-foreground"}`}>{address}</code>
+      {isYou && <span className="text-indigo-300 text-[11px]">(you)</span>}
     </div>
   );
 }
-
-const infoBox: React.CSSProperties = {
-  padding: 20, background: "#0d0d0d", border: "1px solid #1e1e1e",
-  borderRadius: 10, marginBottom: 8,
-};
-
-const primaryBtn: React.CSSProperties = {
-  padding: "11px 24px", background: "#4f46e5", color: "#fff",
-  border: "none", borderRadius: 8, fontSize: 14, cursor: "pointer",
-};
