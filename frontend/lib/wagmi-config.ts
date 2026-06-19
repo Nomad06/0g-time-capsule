@@ -1,11 +1,12 @@
 import { createConfig, http } from "wagmi";
-import { injected } from "wagmi/connectors";
+import { injected, coinbaseWallet } from "wagmi/connectors";
 import { zeroGTestnet } from "../constants/contracts";
 
 export const wagmiConfig = createConfig({
   chains: [zeroGTestnet],
   connectors: [
     injected(),
+    coinbaseWallet({ appName: "0G Time Capsule" }),
   ],
   transports: {
     [zeroGTestnet.id]: http(
