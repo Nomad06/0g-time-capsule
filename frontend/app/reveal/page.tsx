@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 export default function RevealIndexPage() {
   const [id, setId] = useState("");
@@ -14,43 +17,23 @@ export default function RevealIndexPage() {
   }
 
   return (
-    <main style={{ maxWidth: 540, margin: "80px auto", padding: "0 24px" }}>
-      <h1 style={{ fontSize: 28, marginBottom: 8 }}>Open a Capsule</h1>
-      <p style={{ color: "#888", marginBottom: 32 }}>Enter a capsule ID to check its status.</p>
+    <main className="mx-auto max-w-lg px-4 py-16 sm:px-6">
+      <h1 className="mb-1 text-2xl font-bold">Open a Capsule</h1>
+      <p className="mb-8 text-sm text-muted-foreground">Enter a capsule ID to check its status.</p>
 
-      <input
-        placeholder="0x..."
-        value={id}
-        onChange={(e) => setId(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && go()}
-        style={{
-          width: "100%",
-          padding: "12px",
-          background: "#1a1a1a",
-          border: "1px solid #333",
-          borderRadius: 8,
-          color: "#e5e5e5",
-          fontSize: 14,
-          boxSizing: "border-box",
-        }}
-      />
-
-      <button
-        onClick={go}
-        disabled={!id.trim()}
-        style={{
-          marginTop: 16,
-          padding: "12px 32px",
-          background: id.trim() ? "#4f46e5" : "#1a1a1a",
-          color: "#fff",
-          border: "none",
-          borderRadius: 8,
-          fontSize: 15,
-          cursor: id.trim() ? "pointer" : "not-allowed",
-        }}
-      >
-        Open
-      </button>
+      <div className="flex gap-2">
+        <Input
+          placeholder="0x…"
+          value={id}
+          onChange={(e) => setId(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && go()}
+          className="font-mono text-sm"
+        />
+        <Button onClick={go} disabled={!id.trim()}>
+          <Search className="mr-1.5 h-4 w-4" />
+          Open
+        </Button>
+      </div>
     </main>
   );
 }

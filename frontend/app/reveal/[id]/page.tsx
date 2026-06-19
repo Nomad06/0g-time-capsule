@@ -4,28 +4,27 @@ import { useState, useEffect } from "react";
 import { use } from "react";
 import { useAccount } from "wagmi";
 import { BrowserProvider } from "ethers";
-import { getCapsule, isUnlocked } from "../../../lib/contract";
-import { revealCapsule, decryptRevealed } from "../../../lib/capsule";
-import { ConnectButton } from "../../../components/ConnectButton";
-import type { OnChainCapsule, RevealResult } from "../../../lib/types";
+import { LockOpen, Lock } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { ConnectButton } from "@/components/ConnectButton";
+import { getCapsule, isUnlocked } from "@/lib/contract";
+import { revealCapsule, decryptRevealed } from "@/lib/capsule";
+import type { OnChainCapsule, RevealResult } from "@/lib/types";
 
-interface Props {
-  params: Promise<{ id: string }>;
-}
+interface Props { params: Promise<{ id: string }>; }
 
 export default function RevealPage({ params }: Props) {
   const { id } = use(params);
   const capsuleId = id as `0x${string}`;
-
   const { isConnected } = useAccount();
+
   const [capsule,  setCapsule]  = useState<OnChainCapsule | null>(null);
   const [unlocked, setUnlocked] = useState(false);
   const [result,   setResult]   = useState<RevealResult | null>(null);
   const [status,   setStatus]   = useState("");
   const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState("");
 
-  // Poll capsule state every 5 s
   useEffect(() => {
     let cancel = false;
     async function poll() {
@@ -33,7 +32,7 @@ export default function RevealPage({ params }: Props) {
         const [cap, open] = await Promise.all([getCapsule(capsuleId), isUnlocked(capsuleId)]);
         if (!cancel) { setCapsule(cap); setUnlocked(open); }
       } catch (e: unknown) {
-        if (!cancel) setError(e instanceof Error ? e.message : String(e));
+        if (!cancel) toast.error("Failed to load capsule", { description: e instanceof Error ? e.message : String(e) });
       }
     }
     poll();
@@ -43,117 +42,106 @@ export default function RevealPage({ params }: Props) {
 
   async function getSigner() {
     if (!window.ethereum) throw new Error("No wallet detected");
-    const provider = new BrowserProvider(window.ethereum);
-    return provider.getSigner();
+    return new BrowserProvider(window.ethereum).getSigner();
   }
 
   async function handleReveal() {
-    setLoading(true); setError(""); setStatus("Sending reveal tx…");
+    setLoading(true); setStatus("Sending reveal tx…");
     try {
       const signer = await getSigner();
-      setStatus("Sign message to decrypt…");
-      const res = await revealCapsule(capsuleId, signer);
-      setResult(res);
+      setStatus("Sign to decrypt…");
+      setResult(await revealCapsule(capsuleId, signer));
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally { setLoading(false); }
+      toast.error("Reveal failed", { description: e instanceof Error ? e.message : String(e) });
+    } finally { setLoading(false); setStatus(""); }
   }
 
   async function handleDecryptAlreadyRevealed() {
-    setLoading(true); setError(""); setStatus("Sign message to decrypt…");
+    setLoading(true); setStatus("Sign to decrypt…");
     try {
       const signer = await getSigner();
-      const res = await decryptRevealed(capsuleId, signer);
-      setResult(res);
+      setResult(await decryptRevealed(capsuleId, signer));
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally { setLoading(false); }
+      toast.error("Decryption failed", { description: e instanceof Error ? e.message : String(e) });
+    } finally { setLoading(false); setStatus(""); }
   }
 
-  const unlockDate     = capsule ? new Date(Number(capsule.unlockTime) * 1000) : null;
+  const unlockDate      = capsule ? new Date(Number(capsule.unlockTime) * 1000) : null;
   const alreadyRevealed = capsule?.state === 1;
 
   return (
-    <main style={{ maxWidth: 640, margin: "80px auto", padding: "0 24px" }}>
-      <h1 style={{ fontSize: 28, marginBottom: 8 }}>Reveal Capsule</h1>
-      <p style={{ color: "#555", fontSize: 12, wordBreak: "break-all", marginBottom: 24 }}>{capsuleId}</p>
+    <main className="mx-auto max-w-2xl px-4 py-12 sm:px-6">
+      <h1 className="mb-1 text-2xl font-bold">Reveal Capsule</h1>
+      <p className="mb-6 break-all font-mono text-xs text-muted-foreground">{capsuleId}</p>
 
       {capsule && (
-        <div style={metaBox}>
-          <Row label="Owner"       value={capsule.owner} />
-          <Row label="Unlock time" value={unlockDate?.toLocaleString() ?? "—"} />
-          <Row label="Status"      value={
-            alreadyRevealed ? "Revealed" : unlocked ? "Unlocked" : "Locked"
-          } />
-          <Row label="Commit hash" value={capsule.commitHash} />
+        <div className="mb-6 rounded-xl border border-border bg-card p-5">
+          <MetaRow label="Owner"       value={capsule.owner} mono />
+          <MetaRow label="Unlock time" value={unlockDate?.toLocaleString() ?? "—"} />
+          <MetaRow label="Status"      value={alreadyRevealed ? "Revealed" : unlocked ? "Unlocked" : "Locked"} />
+          <MetaRow label="Commit hash" value={capsule.commitHash} mono />
         </div>
       )}
 
-      {!isConnected && <div style={{ marginBottom: 20 }}><ConnectButton /></div>}
+      {!isConnected && <div className="mb-5"><ConnectButton /></div>}
 
       {!result && (
-        <div style={{ display: "flex", gap: 12 }}>
+        <div className="flex flex-wrap gap-3">
           {!alreadyRevealed && (
-            <button
+            <Button
               onClick={handleReveal}
               disabled={loading || !unlocked || !isConnected}
-              style={{
-                ...btnBase,
-                background: (unlocked && isConnected) ? "#4f46e5" : "#1a1a1a",
-                cursor:     (unlocked && isConnected) ? "pointer"  : "not-allowed",
-              }}
+              variant={unlocked && isConnected ? "default" : "secondary"}
             >
-              {loading
-                ? status
-                : !isConnected  ? "Connect wallet"
-                : !unlocked     ? `Locked until ${unlockDate?.toLocaleTimeString() ?? "…"}`
-                : "Reveal & Decrypt"}
-            </button>
+              {loading ? (
+                <span className="flex items-center gap-2">
+                  <LockOpen className="h-4 w-4 animate-pulse" />
+                  {status}
+                </span>
+              ) : !isConnected ? "Connect wallet" :
+                !unlocked ? `Locked until ${unlockDate?.toLocaleString() ?? "…"}` :
+                "Reveal & Decrypt"}
+            </Button>
           )}
           {alreadyRevealed && isConnected && (
-            <button onClick={handleDecryptAlreadyRevealed} disabled={loading} style={{ ...btnBase, background: "#166534" }}>
+            <Button onClick={handleDecryptAlreadyRevealed} disabled={loading}
+              className="bg-green-800 hover:bg-green-700">
               {loading ? status : "Decrypt (sign to read)"}
-            </button>
+            </Button>
           )}
         </div>
       )}
 
-      {error && <p style={{ color: "#f87171", marginTop: 16 }}>{error}</p>}
-
       {result && (
-        <div style={revealBox}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-            <span style={{ fontSize: 20 }}>{result.verified ? "✓" : "⚠"}</span>
-            <span style={{ color: result.verified ? "#4ade80" : "#fbbf24", fontSize: 14 }}>
+        <div className={`mt-8 rounded-xl border p-6 ${result.verified ? "border-green-800 bg-green-950/20" : "border-amber-800 bg-amber-950/20"}`}>
+          <div className="mb-4 flex items-center gap-2.5">
+            {result.verified
+              ? <Lock className="h-5 w-5 text-green-400" />
+              : <span className="text-amber-400">⚠</span>
+            }
+            <span className={`text-sm font-medium ${result.verified ? "text-green-400" : "text-amber-400"}`}>
               {result.verified
                 ? "Verified — content matches on-chain commitment"
                 : "WARNING: content hash mismatch"}
             </span>
           </div>
-          <p style={{ whiteSpace: "pre-wrap", lineHeight: 1.7, fontSize: 15 }}>{result.plaintext}</p>
-          <hr style={{ borderColor: "#1a3a1a", margin: "16px 0" }} />
-          <small style={{ color: "#555" }}>Commit hash: {result.commitHash}</small>
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{result.plaintext}</p>
+          <div className="mt-4 border-t border-border pt-3">
+            <p className="font-mono text-[11px] text-muted-foreground">Commit: {result.commitHash}</p>
+          </div>
         </div>
       )}
     </main>
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function MetaRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div style={{ display: "flex", gap: 12, marginBottom: 8, fontSize: 13 }}>
-      <span style={{ color: "#666", minWidth: 90 }}>{label}</span>
-      <span style={{ wordBreak: "break-all" }}>{value}</span>
+    <div className="mb-2 flex gap-3 text-sm">
+      <span className="w-24 shrink-0 text-muted-foreground">{label}</span>
+      <span className={`break-all ${mono ? "font-mono text-xs text-foreground/80" : "text-foreground"}`}>
+        {value}
+      </span>
     </div>
   );
 }
-
-const metaBox: React.CSSProperties = {
-  padding: 20, background: "#111", border: "1px solid #222", borderRadius: 8, marginBottom: 24,
-};
-const revealBox: React.CSSProperties = {
-  marginTop: 32, padding: 24, background: "#0a1a0a", border: "1px solid #166534", borderRadius: 8,
-};
-const btnBase: React.CSSProperties = {
-  padding: "12px 28px", color: "#fff", border: "none", borderRadius: 8, fontSize: 15,
-};
