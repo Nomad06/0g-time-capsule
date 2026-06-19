@@ -2,24 +2,25 @@
 
 import { useState, useEffect } from "react";
 import { useAccount } from "wagmi";
-import { ConnectButton } from "../../components/ConnectButton";
+import { CheckCircle2, Circle, Download, Upload } from "lucide-react";
+import { toast } from "sonner";
+import { ConnectButton } from "@/components/ConnectButton";
+import { Button } from "@/components/ui/button";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import {
   generateEncryptionKeypair,
   savePrivKeyToStorage,
   loadPrivKeyFromStorage,
   hasSavedPrivKey,
-} from "../../lib/ecies";
-import { registerEncryptionKey, hasEncryptionKey } from "../../lib/contract";
+} from "@/lib/ecies";
+import { registerEncryptionKey, hasEncryptionKey } from "@/lib/contract";
 
 export default function RegisterPage() {
   const { isConnected, address } = useAccount();
-  const [registered,   setRegistered]   = useState<boolean | null>(null);
-  const [hasLocal,     setHasLocal]     = useState(false);
-  const [status,       setStatus]       = useState("");
-  const [loading,      setLoading]      = useState(false);
-  const [error,        setError]        = useState("");
-  const [txHash,       setTxHash]       = useState("");
-  const [pubkeyHex,    setPubkeyHex]    = useState("");
+  const [registered, setRegistered] = useState<boolean | null>(null);
+  const [hasLocal,    setHasLocal]   = useState(false);
+  const [loading,     setLoading]    = useState(false);
+  const [pubkeyHex,   setPubkeyHex]  = useState("");
 
   useEffect(() => {
     if (!address) return;
@@ -29,56 +30,54 @@ export default function RegisterPage() {
 
   async function handleRegister() {
     if (!address) return;
-    setLoading(true); setError(""); setStatus("Generating keypair…");
+    setLoading(true);
     try {
       const { privKey, pubKey } = generateEncryptionKeypair();
       savePrivKeyToStorage(address, privKey);
       setHasLocal(true);
-
       const hex = `0x${Buffer.from(pubKey).toString("hex")}` as `0x${string}`;
       setPubkeyHex(hex);
-
-      setStatus("Sending registration tx…");
       const tx = await registerEncryptionKey(hex);
-      setTxHash(tx);
       setRegistered(true);
-      setStatus("Registered!");
+      toast.success("Key registered on-chain!", { description: `Tx: ${tx.slice(0, 18)}…` });
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false); }
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes("Switched to 0G Testnet")) {
+        toast.info("Switched to 0G Testnet", { description: "Press Register again." });
+      } else {
+        toast.error("Registration failed", { description: msg });
+      }
+    } finally { setLoading(false); }
   }
 
   async function handleReRegister() {
     if (!address) return;
-    setLoading(true); setError(""); setStatus("Generating new keypair…");
+    setLoading(true);
     try {
       const { privKey, pubKey } = generateEncryptionKeypair();
       savePrivKeyToStorage(address, privKey);
-
       const hex = `0x${Buffer.from(pubKey).toString("hex")}` as `0x${string}`;
       setPubkeyHex(hex);
-      setStatus("Sending update tx…");
       const tx = await registerEncryptionKey(hex);
-      setTxHash(tx);
       setRegistered(true);
-      setStatus("Updated!");
+      toast.success("Key updated on-chain!", { description: `Tx: ${tx.slice(0, 18)}…` });
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false); }
+      toast.error("Re-registration failed", { description: e instanceof Error ? e.message : String(e) });
+    } finally { setLoading(false); }
   }
 
   function handleExportKey() {
     if (!address) return;
     const privKey = loadPrivKeyFromStorage(address);
-    if (!privKey) { setError("No local key found"); return; }
-    const hex = Buffer.from(privKey).toString("hex");
-    const blob = new Blob([hex], { type: "text/plain" });
+    if (!privKey) { toast.error("No local key found"); return; }
+    const blob = new Blob([Buffer.from(privKey).toString("hex")], { type: "text/plain" });
     const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
-    a.href = url; a.download = `0g-capsule-key-${address.slice(0, 8)}.txt`;
-    a.click(); URL.revokeObjectURL(url);
+    const a    = Object.assign(document.createElement("a"), {
+      href: url, download: `0g-capsule-key-${address.slice(0, 8)}.txt`,
+    });
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Private key exported");
   }
 
   function handleImportKey(e: React.ChangeEvent<HTMLInputElement>) {
@@ -87,132 +86,109 @@ export default function RegisterPage() {
     const reader = new FileReader();
     reader.onload = () => {
       const hex = (reader.result as string).trim();
-      if (hex.length !== 64) { setError("Invalid key file (expected 32-byte hex)"); return; }
-      const privKey = new Uint8Array(Buffer.from(hex, "hex"));
-      savePrivKeyToStorage(address, privKey);
+      if (hex.length !== 64) { toast.error("Invalid key file", { description: "Expected 32-byte hex string." }); return; }
+      savePrivKeyToStorage(address, new Uint8Array(Buffer.from(hex, "hex")));
       setHasLocal(true);
-      setStatus("Key imported from file.");
+      toast.success("Key imported successfully");
     };
     reader.readAsText(file);
   }
 
   return (
-    <main style={{ maxWidth: 560, margin: "80px auto", padding: "0 24px" }}>
-      <h1 style={{ fontSize: 26, marginBottom: 8 }}>Register Encryption Key</h1>
-      <p style={{ color: "#888", marginBottom: 32, lineHeight: 1.6 }}>
+    <main className="mx-auto max-w-lg px-4 py-16 sm:px-6">
+      <h1 className="mb-1 text-2xl font-bold">Register Encryption Key</h1>
+      <p className="mb-8 text-sm text-muted-foreground leading-relaxed">
         Generate a secp256k1 keypair in your browser. The private key stays in
         localStorage; the public key is registered on-chain so others can seal
         capsules specifically for you.
       </p>
 
-      {!isConnected && <div style={{ marginBottom: 24 }}><ConnectButton /></div>}
+      {!isConnected && (
+        <div className="mb-6">
+          <ConnectButton />
+        </div>
+      )}
 
       {isConnected && (
-        <>
+        <div className="flex flex-col gap-4">
           {/* Status indicators */}
-          <div style={{ display: "flex", gap: 12, marginBottom: 28, flexWrap: "wrap" }}>
-            <Badge ok={registered === true} label="On-chain key" />
-            <Badge ok={hasLocal}            label="Local private key" />
-          </div>
+          <Card>
+            <CardContent className="flex flex-col gap-3 pt-6">
+              <StatusRow ok={registered === true} label="On-chain key registered" />
+              <StatusRow ok={hasLocal}            label="Local private key saved" />
+              {pubkeyHex && (
+                <div className="mt-2 rounded-md bg-secondary p-3">
+                  <p className="mb-1 text-xs text-muted-foreground">Public key</p>
+                  <code className="break-all text-[11px] text-indigo-300">{pubkeyHex}</code>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-          {!registered && !hasLocal && (
-            <div style={infoBox}>
-              <p style={{ margin: 0, color: "#888", fontSize: 14, lineHeight: 1.7 }}>
-                You haven&apos;t registered yet. Click below to generate a keypair and
-                register your public key on-chain. The private key is saved to your
-                browser — back it up afterward.
-              </p>
+          {/* Warning states */}
+          {registered && !hasLocal && (
+            <div className="rounded-lg border border-amber-800 bg-amber-950/30 p-4 text-sm text-amber-300">
+              On-chain key found but no local private key. Import your backup or
+              re-register (this invalidates capsules encrypted to the old key).
             </div>
           )}
 
-          {registered && !hasLocal && (
-            <div style={{ ...infoBox, borderColor: "#78350f" }}>
-              <p style={{ margin: 0, color: "#fb923c", fontSize: 14 }}>
-                On-chain key found but no local private key. Import your backup or
-                re-register (this will invalidate capsules encrypted to the old key).
-              </p>
+          {!registered && !hasLocal && (
+            <div className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
+              No key registered yet. Click below to generate a keypair and register
+              your public key on-chain.
             </div>
           )}
 
           {/* Actions */}
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 20 }}>
+          <div className="flex flex-wrap gap-3">
             {!registered && (
-              <button onClick={handleRegister} disabled={loading} style={primaryBtn}>
-                {loading ? status : "Generate & Register"}
-              </button>
+              <Button onClick={handleRegister} disabled={loading}>
+                {loading ? "Registering…" : "Generate & Register"}
+              </Button>
             )}
             {registered && (
-              <button onClick={handleReRegister} disabled={loading} style={{ ...primaryBtn, background: "#374151" }}>
-                {loading ? status : "Re-register (new key)"}
-              </button>
+              <Button variant="secondary" onClick={handleReRegister} disabled={loading}>
+                {loading ? "Updating…" : "Re-register (new key)"}
+              </Button>
             )}
             {hasLocal && (
-              <button onClick={handleExportKey} style={ghostBtn}>
-                Export private key
-              </button>
+              <Button variant="outline" onClick={handleExportKey}>
+                <Download className="mr-1.5 h-4 w-4" />
+                Export key
+              </Button>
             )}
           </div>
 
-          <div style={{ marginTop: 16 }}>
-            <label style={{ color: "#666", fontSize: 13 }}>
-              Import private key from backup:{" "}
-              <input type="file" accept=".txt" onChange={handleImportKey}
-                style={{ color: "#888", fontSize: 13 }} />
-            </label>
-          </div>
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <Upload className="h-4 w-4" />
+            Import key from backup
+            <input
+              type="file"
+              accept=".txt"
+              onChange={handleImportKey}
+              className="sr-only"
+            />
+          </label>
 
-          {txHash && (
-            <div style={{ marginTop: 24, padding: 16, background: "#0a150a", border: "1px solid #14532d", borderRadius: 8 }}>
-              <p style={{ color: "#4ade80", margin: "0 0 6px", fontWeight: "bold" }}>{status}</p>
-              {pubkeyHex && (
-                <p style={{ fontSize: 12, color: "#888", wordBreak: "break-all", margin: "0 0 6px" }}>
-                  Public key: <code style={{ color: "#818cf8" }}>{pubkeyHex}</code>
-                </p>
-              )}
-              <p style={{ fontSize: 12, color: "#666", margin: 0 }}>
-                Tx: <code style={{ wordBreak: "break-all" }}>{txHash}</code>
-              </p>
-              <p style={{ fontSize: 12, color: "#f59e0b", marginTop: 10 }}>
-                Back up your private key — if you clear localStorage you can no longer decrypt
-                capsules sent to you.
-              </p>
-            </div>
-          )}
-
-          {status && !txHash && (
-            <p style={{ color: "#818cf8", marginTop: 16, fontSize: 14 }}>{status}</p>
-          )}
-          {error && <p style={{ color: "#f87171", marginTop: 16, fontSize: 14 }}>{error}</p>}
-        </>
+          <p className="text-xs text-muted-foreground/60">
+            ⚠ Back up your private key. If you clear localStorage you can no longer decrypt
+            capsules sent to you.
+          </p>
+        </div>
       )}
     </main>
   );
 }
 
-function Badge({ ok, label }: { ok: boolean; label: string }) {
+function StatusRow({ ok, label }: { ok: boolean; label: string }) {
   return (
-    <span style={{
-      padding: "4px 12px", borderRadius: 4, fontSize: 12, fontWeight: "bold",
-      background: ok ? "#052e16" : "#1a1a1a",
-      color:      ok ? "#4ade80" : "#666",
-      border:     `1px solid ${ok ? "#166534" : "#333"}`,
-    }}>
-      {ok ? "✓" : "○"} {label}
-    </span>
+    <div className="flex items-center gap-2.5 text-sm">
+      {ok
+        ? <CheckCircle2 className="h-4 w-4 shrink-0 text-green-400" />
+        : <Circle className="h-4 w-4 shrink-0 text-muted-foreground/40" />
+      }
+      <span className={ok ? "text-foreground" : "text-muted-foreground"}>{label}</span>
+    </div>
   );
 }
-
-const infoBox: React.CSSProperties = {
-  padding: 16, background: "#0d0d0d", border: "1px solid #1e1e1e",
-  borderRadius: 8, marginBottom: 8,
-};
-
-const primaryBtn: React.CSSProperties = {
-  padding: "11px 24px", background: "#4f46e5", color: "#fff",
-  border: "none", borderRadius: 8, fontSize: 14, cursor: "pointer",
-};
-
-const ghostBtn: React.CSSProperties = {
-  padding: "11px 24px", background: "transparent", color: "#888",
-  border: "1px solid #333", borderRadius: 8, fontSize: 14, cursor: "pointer",
-};
