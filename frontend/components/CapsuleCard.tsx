@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { motion } from "framer-motion";
+import { cn } from "@/lib/utils";
 import type { OnChainCapsule } from "../lib/types";
 
-const TRIGGER_LABELS: Record<number, { label: string; icon: string; color: string }> = {
-  0: { label: "Time lock",        icon: "⏰", color: "#1e1b4b" },
-  1: { label: "Dead Man's Switch", icon: "💀", color: "#422006" },
-  2: { label: "Oracle",           icon: "🔮", color: "#172554" },
-  3: { label: "Multi-Sig",        icon: "🗳️", color: "#1e1b4b" },
+const TRIGGER_META: Record<number, { label: string; icon: string; className: string }> = {
+  0: { label: "Time lock",         icon: "⏰", className: "border-indigo-900 bg-indigo-950/50 text-indigo-400" },
+  1: { label: "Dead Man's Switch", icon: "💀", className: "border-amber-900 bg-amber-950/50 text-amber-400" },
+  2: { label: "Oracle",            icon: "🔮", className: "border-blue-900 bg-blue-950/50 text-blue-400" },
+  3: { label: "Multi-Sig",         icon: "🗳️", className: "border-indigo-900 bg-indigo-950/50 text-indigo-400" },
 };
 
 interface Props {
@@ -17,110 +19,103 @@ interface Props {
 }
 
 export function CapsuleCard({ id, capsule, myAddress }: Props) {
-  const revealed    = capsule.state === 1;
-  const unlockDate  = new Date(Number(capsule.unlockTime) * 1000);
-  const sealDate    = new Date(Number(capsule.createdAt) * 1000);
-  const isOwner     = myAddress && capsule.owner.toLowerCase() === myAddress.toLowerCase();
-  const isRecipient = myAddress && capsule.recipients.some(r => r.toLowerCase() === myAddress.toLowerCase());
-  const now         = Date.now();
+  const revealed     = capsule.state === 1;
+  const unlockDate   = new Date(Number(capsule.unlockTime) * 1000);
+  const sealDate     = new Date(Number(capsule.createdAt) * 1000);
+  const isOwner      = myAddress && capsule.owner.toLowerCase() === myAddress.toLowerCase();
+  const isRecipient  = myAddress && capsule.recipients.some(r => r.toLowerCase() === myAddress.toLowerCase());
+  const now          = Date.now();
   const timeUnlocked = now >= unlockDate.getTime();
-  const trigger     = TRIGGER_LABELS[capsule.triggerType] ?? TRIGGER_LABELS[0];
+  const trigger      = TRIGGER_META[capsule.triggerType] ?? TRIGGER_META[0];
 
-  // Compute countdown text
   const diff   = unlockDate.getTime() - now;
   const days   = Math.floor(diff / 86400000);
   const hours  = Math.floor((diff % 86400000) / 3600000);
+
   const countdownText =
-    revealed   ? "Revealed"           :
-    timeUnlocked ? "Ready to reveal"  :
-    diff < 3600000 ? `${Math.floor(diff / 60000)}m left` :
-    diff < 86400000 ? `${hours}h left` :
+    revealed      ? "Revealed"          :
+    timeUnlocked  ? "Ready to reveal"   :
+    diff < 3600000  ? `${Math.floor(diff / 60000)}m left` :
+    diff < 86400000 ? `${hours}h left`  :
     `${days}d left`;
 
-  const stateColor =
-    revealed      ? "#4ade80" :
-    timeUnlocked  ? "#fb923c" :
-    "#a5b4fc";
+  const countdownColor =
+    revealed     ? "text-green-400" :
+    timeUnlocked ? "text-orange-400" :
+    "text-indigo-300";
+
+  const borderClass =
+    revealed     ? "border-green-900 hover:border-green-700" :
+    timeUnlocked ? "border-amber-900 hover:border-amber-700" :
+    "border-border hover:border-indigo-700";
 
   return (
-    <Link href={`/proof/${id}`} style={{ textDecoration: "none" }}>
-      <div style={cardBase(revealed, timeUnlocked)}>
-        {/* Top row: badges + date */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            <Badge
-              text={revealed ? "REVEALED" : "SEALED"}
-              bg={revealed ? "#052e16" : "#1a1a2e"}
-              color={revealed ? "#4ade80" : "#a5b4fc"}
-              border={revealed ? "#166534" : "#3730a3"}
-            />
-            {!revealed && timeUnlocked && (
-              <Badge text="UNLOCKED" bg="#422006" color="#fb923c" border="#78350f" />
-            )}
-            {isOwner     && <Badge text="MINE"      bg="#0d0d0d" color="#555" border="#2a2a2a" />}
-            {isRecipient && <Badge text="RECIPIENT" bg="#0d0d0d" color="#818cf8" border="#2a2a2a" />}
+    <motion.div whileHover={{ y: -2 }} transition={{ duration: 0.15 }}>
+      <Link href={`/proof/${id}`} className="block no-underline">
+        <div
+          className={cn(
+            "rounded-xl border bg-card px-4 py-4 transition-colors duration-150",
+            borderClass
+          )}
+        >
+          {/* Top row */}
+          <div className="mb-2.5 flex items-start justify-between gap-2">
+            <div className="flex flex-wrap gap-1.5">
+              <span className={cn(
+                "inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-bold tracking-widest",
+                revealed
+                  ? "border-green-800 bg-green-950 text-green-400"
+                  : "border-indigo-900 bg-indigo-950 text-indigo-400"
+              )}>
+                {revealed ? "REVEALED" : "SEALED"}
+              </span>
+              {!revealed && timeUnlocked && (
+                <span className="inline-flex items-center rounded border border-amber-800 bg-amber-950 px-1.5 py-0.5 text-[10px] font-bold tracking-widest text-amber-400">
+                  UNLOCKED
+                </span>
+              )}
+              {isOwner && (
+                <span className="inline-flex items-center rounded border border-border bg-secondary px-1.5 py-0.5 text-[10px] font-bold tracking-widest text-muted-foreground">
+                  MINE
+                </span>
+              )}
+              {isRecipient && (
+                <span className="inline-flex items-center rounded border border-indigo-900 bg-secondary px-1.5 py-0.5 text-[10px] font-bold tracking-widest text-indigo-400">
+                  RECIPIENT
+                </span>
+              )}
+            </div>
+            <span className="shrink-0 text-[11px] text-muted-foreground/60">
+              {sealDate.toLocaleDateString()}
+            </span>
           </div>
-          <span style={{ color: "#444", fontSize: 11, flexShrink: 0, marginLeft: 8 }}>
-            {sealDate.toLocaleDateString()}
-          </span>
+
+          {/* Truncated ID */}
+          <p className="mb-3 truncate font-mono text-[11px] text-muted-foreground/40">
+            {id.slice(0, 14)}…{id.slice(-8)}
+          </p>
+
+          {/* Bottom row */}
+          <div className="flex items-center justify-between">
+            <span className={cn(
+              "inline-flex items-center gap-1.5 rounded border px-2 py-1 text-[11px]",
+              trigger.className
+            )}>
+              <span>{trigger.icon}</span>
+              <span>{trigger.label}</span>
+            </span>
+            <span className={cn("text-xs font-semibold", countdownColor)}>
+              {countdownText}
+            </span>
+          </div>
+
+          {capsule.recipients.length > 0 && (
+            <p className="mt-2.5 text-[11px] text-muted-foreground/50">
+              {capsule.recipients.length} recipient{capsule.recipients.length > 1 ? "s" : ""} · ECIES-encrypted
+            </p>
+          )}
         </div>
-
-        {/* ID */}
-        <p style={{ margin: "0 0 12px", fontSize: 11, fontFamily: "monospace", color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {id}
-        </p>
-
-        {/* Bottom row: trigger type + countdown */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{
-            display: "flex", alignItems: "center", gap: 6,
-            padding: "3px 10px",
-            borderRadius: 4,
-            background: trigger.color,
-            border: "1px solid #333",
-            fontSize: 11,
-            color: "#888",
-          }}>
-            <span>{trigger.icon}</span>
-            <span>{trigger.label}</span>
-          </div>
-          <span style={{ color: stateColor, fontSize: 12, fontWeight: "bold" }}>
-            {countdownText}
-          </span>
-        </div>
-
-        {/* Recipient count hint */}
-        {capsule.recipients.length > 0 && (
-          <div style={{ marginTop: 10, fontSize: 11, color: "#444" }}>
-            {capsule.recipients.length} recipient{capsule.recipients.length > 1 ? "s" : ""} · ECIES-encrypted
-          </div>
-        )}
-      </div>
-    </Link>
+      </Link>
+    </motion.div>
   );
-}
-
-function Badge({ text, bg, color, border }: { text: string; bg: string; color: string; border: string }) {
-  return (
-    <span style={{
-      padding: "2px 8px", borderRadius: 4,
-      fontSize: 10, fontWeight: "bold", letterSpacing: 1,
-      background: bg, color, border: `1px solid ${border}`,
-    }}>
-      {text}
-    </span>
-  );
-}
-
-function cardBase(revealed: boolean, unlocked: boolean): React.CSSProperties {
-  const border =
-    revealed ? "#166534" :
-    unlocked ? "#78350f" :
-    "#1e1e1e";
-  return {
-    padding: 18, background: "#0d0d0d",
-    border: `1px solid ${border}`,
-    borderRadius: 10, cursor: "pointer",
-    transition: "border-color 0.15s, background 0.15s",
-  };
 }
