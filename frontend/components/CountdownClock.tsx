@@ -5,9 +5,10 @@ import { useState, useEffect } from "react";
 interface Props {
   unlockDate: Date;
   isUnlocked: boolean;
+  compact?:   boolean;
 }
 
-export function CountdownClock({ unlockDate, isUnlocked }: Props) {
+export function CountdownClock({ unlockDate, isUnlocked, compact }: Props) {
   const [remaining, setRemaining] = useState(unlockDate.getTime() - Date.now());
 
   useEffect(() => {
@@ -16,7 +17,14 @@ export function CountdownClock({ unlockDate, isUnlocked }: Props) {
     return () => clearInterval(t);
   }, [unlockDate, isUnlocked]);
 
+  const total = Math.max(0, remaining);
+  const d     = Math.floor(total / 86400000);
+  const h     = Math.floor((total % 86400000) / 3600000);
+  const m     = Math.floor((total % 3600000) / 60000);
+  const s     = Math.floor((total % 60000) / 1000);
+
   if (isUnlocked) {
+    if (compact) return <span className="text-xs text-green-400">🔓 Unlocked</span>;
     return (
       <div className="rounded-[10px] border border-green-800 bg-green-950 p-6 text-center">
         <span className="mr-2.5 text-[22px]">🔓</span>
@@ -25,11 +33,13 @@ export function CountdownClock({ unlockDate, isUnlocked }: Props) {
     );
   }
 
-  const total = Math.max(0, remaining);
-  const d     = Math.floor(total / 86400000);
-  const h     = Math.floor((total % 86400000) / 3600000);
-  const m     = Math.floor((total % 3600000) / 60000);
-  const s     = Math.floor((total % 60000) / 1000);
+  if (compact) {
+    const parts = [];
+    if (d > 0) parts.push(`${d}d`);
+    if (h > 0 || d > 0) parts.push(`${h}h`);
+    parts.push(`${m}m`);
+    return <span className="text-xs text-indigo-300">🔒 {parts.join(" ")}</span>;
+  }
 
   return (
     <div className="rounded-[10px] border border-indigo-950 bg-[#0f0f1a] p-6 text-center">

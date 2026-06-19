@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 
 const NAV_LINKS = [
   { href: "/seal",     label: "Seal" },
+  { href: "/discover", label: "Discover" },
   { href: "/gallery",  label: "My Capsules" },
   { href: "/reveal",   label: "Open" },
   { href: "/register", label: "Register Key" },

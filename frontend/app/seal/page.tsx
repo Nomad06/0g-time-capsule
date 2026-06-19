@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useAccount } from "wagmi";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Lock, LockOpen } from "lucide-react";
+import { Lock, LockOpen, Upload, FileText, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { ConnectButton } from "@/components/ConnectButton";
 import { cn } from "@/lib/utils";
 import { sealCapsule } from "@/lib/capsule";
 import { TriggerType } from "@/lib/types";
+import { MediaRenderer, getMediaType } from "@/components/MediaRenderer";
 import type { SealResult } from "@/lib/types";
 
 const TRIGGER_OPTS = [
@@ -22,11 +23,43 @@ const TRIGGER_OPTS = [
   { value: TriggerType.MULTISIG, label: "🗳️ Multi-Sig",        desc: "Unlocks when M-of-N signers approve" },
 ] as const;
 
+const TEMPLATES = [
+  {
+    label: "✉️ Letter to future self",
+    message: "Dear future me,\n\nToday is [date]. As I write this, I am thinking about...\n\nI hope that by the time you read this, you have...\n\nRemember: ",
+    minutes: 525600, // 1 year in minutes
+  },
+  {
+    label: "📈 Investment thesis",
+    message: "Asset: \nDate: \nMy thesis:\n\nKey assumptions:\n1. \n2. \n\nI will consider this thesis proven if...",
+    minutes: 262800, // 6 months
+  },
+  {
+    label: "💌 Love letter",
+    message: "My dearest,\n\nI am sealing these words for our anniversary.\n\n",
+    minutes: 525600,
+  },
+  {
+    label: "📣 Announcement",
+    message: "We are excited to announce that on [reveal date], [company/project] will...",
+    minutes: 10080, // 1 week
+  },
+] as const;
+
+const MAX_FILE_MB = 50;
+
 export default function SealPage() {
   const { isConnected } = useAccount();
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // content mode
+  const [contentMode, setContentMode] = useState<"text" | "file">("text");
   const [message,     setMessage]     = useState("");
+  const [fileDataUri, setFileDataUri] = useState<string | null>(null);
+  const [fileName,    setFileName]    = useState("");
+
+  // trigger
   const [minutes,     setMinutes]     = useState(2);
   const [triggerType, setTriggerType] = useState<TriggerType>(TriggerType.TIME);
   const [dmsInterval, setDmsInterval] = useState(1);
@@ -42,9 +75,39 @@ export default function SealPage() {
     .split(/[\s,]+/)
     .filter(s => s.startsWith("0x") && s.length === 42).length;
 
+  function applyTemplate(tpl: typeof TEMPLATES[number]) {
+    setContentMode("text");
+    setMessage(tpl.message);
+    setMinutes(tpl.minutes);
+    setTriggerType(TriggerType.TIME);
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > MAX_FILE_MB * 1024 * 1024) {
+      toast.error(`File too large (max ${MAX_FILE_MB} MB)`);
+      return;
+    }
+    setFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = () => { setFileDataUri(reader.result as string); };
+    reader.readAsDataURL(file);
+  }
+
+  function clearFile() {
+    setFileDataUri(null);
+    setFileName("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
   async function handleSeal() {
-    if (!message.trim()) { toast.error("Message is empty"); return; }
-    if (!isConnected)    { toast.error("Connect wallet first"); return; }
+    const plaintext = contentMode === "file" ? fileDataUri ?? "" : message;
+    if (!plaintext.trim()) {
+      toast.error(contentMode === "file" ? "No file selected" : "Message is empty");
+      return;
+    }
+    if (!isConnected) { toast.error("Connect wallet first"); return; }
     setLoading(true); setResult(null);
 
     try {
@@ -57,11 +120,11 @@ export default function SealPage() {
       setStatus(
         triggerType === TriggerType.DEADMAN  ? "Sealing + arming dead man's switch…" :
         triggerType === TriggerType.MULTISIG ? "Sealing + creating multi-sig vault…" :
-        "Encrypting + uploading to 0G…"
+        "Encrypting + uploading to 0G Storage…"
       );
 
       const res = await sealCapsule({
-        plaintext:  message,
+        plaintext,
         unlockTime,
         recipients: [],
         triggerType,
@@ -87,16 +150,97 @@ export default function SealPage() {
 
       {!isConnected && <div className="mb-6"><ConnectButton /></div>}
 
-      {/* Message */}
+      {/* Templates */}
       <div className="mb-5">
-        <Textarea
-          rows={5}
-          placeholder="Write your message…"
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          disabled={loading}
-        />
+        <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Start from template</p>
+        <div className="flex flex-wrap gap-2">
+          {TEMPLATES.map(tpl => (
+            <button
+              key={tpl.label}
+              onClick={() => applyTemplate(tpl)}
+              disabled={loading}
+              className="rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-indigo-800 hover:text-indigo-300"
+            >
+              {tpl.label}
+            </button>
+          ))}
+        </div>
       </div>
+
+      {/* Content mode tabs */}
+      <div className="mb-4 flex gap-1 rounded-lg border border-border bg-card p-1">
+        <button
+          onClick={() => setContentMode("text")}
+          className={cn(
+            "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+            contentMode === "text" ? "bg-indigo-950/60 text-indigo-300" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <FileText className="h-3.5 w-3.5" /> Text
+        </button>
+        <button
+          onClick={() => setContentMode("file")}
+          className={cn(
+            "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+            contentMode === "file" ? "bg-indigo-950/60 text-indigo-300" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <Upload className="h-3.5 w-3.5" /> File / Media
+        </button>
+      </div>
+
+      {/* Content input */}
+      <AnimatePresence mode="wait">
+        {contentMode === "text" ? (
+          <motion.div key="text" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="mb-5">
+            <Textarea
+              rows={6}
+              placeholder="Write your message…"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              disabled={loading}
+            />
+          </motion.div>
+        ) : (
+          <motion.div key="file" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="mb-5">
+            {!fileDataUri ? (
+              <label className={cn(
+                "flex cursor-pointer flex-col items-center gap-3 rounded-lg border-2 border-dashed border-border bg-card px-6 py-10 text-center transition-colors hover:border-indigo-800 hover:bg-indigo-950/10",
+                loading && "pointer-events-none opacity-50"
+              )}>
+                <Upload className="h-8 w-8 text-muted-foreground/50" />
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Drop file or click to browse</p>
+                  <p className="mt-1 text-xs text-muted-foreground/50">Image, audio, video, PDF · max {MAX_FILE_MB} MB</p>
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*,audio/*,video/*,application/pdf"
+                  className="sr-only"
+                  onChange={handleFileChange}
+                  disabled={loading}
+                />
+              </label>
+            ) : (
+              <div className="rounded-lg border border-border bg-card p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <span className="text-sm font-medium text-foreground/80 truncate">{fileName}</span>
+                  <button onClick={clearFile} className="ml-2 shrink-0 text-muted-foreground hover:text-foreground">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="overflow-hidden rounded-md">
+                  <MediaRenderer content={fileDataUri} />
+                </div>
+                <p className="mt-2 text-xs text-indigo-400">
+                  Type: {getMediaType(fileDataUri)} · Will be AES-256-GCM encrypted before upload to 0G Storage
+                </p>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Trigger selector */}
       <div className="mb-5">

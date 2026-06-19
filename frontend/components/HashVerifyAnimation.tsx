@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { MediaRenderer } from "./MediaRenderer";
 
 interface Props {
   plaintext:   string;
@@ -94,9 +95,7 @@ export function HashVerifyAnimation({ plaintext, commitHash, revealedHash, verif
           <p className="mb-3 text-[11px] uppercase tracking-[1px] text-muted-foreground/60">
             Revealed content
           </p>
-          <p className="m-0 whitespace-pre-wrap text-base leading-[1.8] text-[#e5e5e5]">
-            {plaintext}
-          </p>
+          <MediaRenderer content={plaintext} />
         </div>
       )}
 
