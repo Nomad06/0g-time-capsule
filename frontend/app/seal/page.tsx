@@ -14,7 +14,8 @@ import { ConnectButton } from "@/components/ConnectButton";
 import { cn } from "@/lib/utils";
 import { sealCapsule } from "@/lib/capsule";
 import { TriggerType } from "@/lib/types";
-import type { SealResult } from "@/lib/types";
+import type { SealResult, RecipientParam } from "@/lib/types";
+import { getEncryptionKey } from "@/lib/contract";
 
 const TRIGGER_OPTS = [
   { value: TriggerType.TIME,     label: "⏰ Time lock",        desc: "Unlocks at a set time" },
@@ -28,6 +29,7 @@ export default function SealPage() {
 
   const [message,     setMessage]     = useState("");
   const [minutes,     setMinutes]     = useState(2);
+  const [recipInput,  setRecipInput]  = useState("");
   const [triggerType, setTriggerType] = useState<TriggerType>(TriggerType.TIME);
   const [dmsInterval, setDmsInterval] = useState(1);
   const [msSigners,   setMsSigners]   = useState("");
@@ -49,6 +51,24 @@ export default function SealPage() {
 
     try {
       const unlockTime = new Date(Date.now() + minutes * 60 * 1000);
+      const rawAddresses = recipInput
+        .split(/[\s,]+/)
+        .map(s => s.trim())
+        .filter(s => s.startsWith("0x") && s.length === 42) as `0x${string}`[];
+
+      let recipients: RecipientParam[] = [];
+      if (rawAddresses.length > 0) {
+        setStatus("Fetching recipient keys…");
+        recipients = await Promise.all(
+          rawAddresses.map(async (addr) => {
+            const pubkeyHex = await getEncryptionKey(addr);
+            if (!pubkeyHex || pubkeyHex === "0x")
+              throw new Error(`${addr} has not registered an encryption key.`);
+            return { address: addr, pubkey: new Uint8Array(Buffer.from(pubkeyHex.slice(2), "hex")) };
+          })
+        );
+      }
+
       const multisigSigners = msSigners
         .split(/[\s,]+/)
         .map(s => s.trim())
@@ -63,7 +83,7 @@ export default function SealPage() {
       const res = await sealCapsule({
         plaintext:  message,
         unlockTime,
-        recipients: [],
+        recipients,
         triggerType,
         deadman:  triggerType === TriggerType.DEADMAN  ? { intervalDays: dmsInterval }                         : undefined,
         multisig: triggerType === TriggerType.MULTISIG ? { signers: multisigSigners, threshold: msThreshold } : undefined,
@@ -196,6 +216,23 @@ export default function SealPage() {
           </div>
         </div>
       )}
+
+      {/* Recipients */}
+      <div className="mb-6">
+        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+          Recipients <span className="text-muted-foreground/50">(optional)</span>
+        </label>
+        <Input
+          placeholder="0xAbc…, 0xDef… (comma-separated)"
+          value={recipInput}
+          onChange={(e) => setRecipInput(e.target.value)}
+          disabled={loading}
+        />
+        <p className="mt-1.5 text-xs text-muted-foreground/60">
+          Each address must have registered a key at{" "}
+          <a href="/register" className="text-indigo-400 hover:text-indigo-300">/register</a>.
+        </p>
+      </div>
 
       {/* Submit + animation */}
       <AnimatePresence mode="wait">
