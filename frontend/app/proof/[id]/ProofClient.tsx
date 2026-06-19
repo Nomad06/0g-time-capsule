@@ -7,6 +7,8 @@ import Link from "next/link";
 import { getCapsule, isUnlocked } from "../../../lib/contract";
 import { revealCapsule, decryptRevealed, decryptAsRecipient } from "../../../lib/capsule";
 import { loadPrivKeyFromStorage, hasSavedPrivKey } from "../../../lib/ecies";
+import { mintCapsuleNFT, getCapsuleTokenId, nftMarketplaceUrl } from "../../../lib/nft";
+import { CONTRACT_ADDRESSES } from "../../../constants/contracts";
 import { HashVerifyAnimation } from "../../../components/HashVerifyAnimation";
 import { CountdownClock } from "../../../components/CountdownClock";
 import { Button } from "../../../components/ui/button";
@@ -25,6 +27,9 @@ export function ProofClient({ capsuleId }: Props) {
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState("");
   const [copied,   setCopied]   = useState(false);
+  const [nftTokenId, setNftTokenId] = useState<bigint | null>(null);
+  const [nftLoading, setNftLoading] = useState(false);
+  const nftEnabled = CONTRACT_ADDRESSES.CapsuleNFT !== "0x";
 
   useEffect(() => {
     let cancel = false;
@@ -40,6 +45,21 @@ export function ProofClient({ capsuleId }: Props) {
     const t = setInterval(poll, 5000);
     return () => { cancel = true; clearInterval(t); };
   }, [capsuleId]);
+
+  useEffect(() => {
+    if (!nftEnabled || !capsuleId) return;
+    getCapsuleTokenId(capsuleId).then(id => { if (id > 0n) setNftTokenId(id); }).catch(() => {});
+  }, [capsuleId, nftEnabled]);
+
+  async function handleMintNFT() {
+    setNftLoading(true);
+    try {
+      const { tokenId } = await mintCapsuleNFT(capsuleId);
+      setNftTokenId(tokenId);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally { setNftLoading(false); }
+  }
 
   async function getSigner() {
     if (!window.ethereum) throw new Error("No wallet detected");
@@ -211,6 +231,33 @@ export function ProofClient({ capsuleId }: Props) {
               Capsule revealed. Connect wallet to decrypt.
             </p>
           )}
+        </div>
+      )}
+
+      {/* NFT mint */}
+      {nftEnabled && isConnected && isOwner && !alreadyRevealed && (
+        <div className="my-4 flex items-center gap-3">
+          {nftTokenId ? (
+            <a
+              href={nftMarketplaceUrl(nftTokenId)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-indigo-400 hover:text-indigo-300"
+            >
+              🎟 NFT #{String(nftTokenId)} minted — view on marketplace →
+            </a>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleMintNFT}
+              disabled={nftLoading}
+              className="border-indigo-800 text-indigo-400 hover:bg-indigo-950 hover:text-indigo-300"
+            >
+              {nftLoading ? "Minting…" : "🎟 Mint as NFT"}
+            </Button>
+          )}
+          <span className="text-xs text-muted-foreground/50">Transfer reveal rights via NFT</span>
         </div>
       )}
 

@@ -7,6 +7,7 @@
     "test": "hardhat test",
     "test:gas": "REPORT_GAS=true hardhat test",
     "deploy:testnet": "hardhat run scripts/deploy.ts --network zerogTestnet",
+    "deploy:nft": "hardhat run scripts/deploy-nft.ts --network zerogTestnet",
     "deploy:local": "hardhat run scripts/deploy.ts --network localhost",
     "node": "hardhat node",
     "typechain": "hardhat typechain",

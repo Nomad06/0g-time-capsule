@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { sealCapsule } from "@/lib/capsule";
 import { TriggerType } from "@/lib/types";
 import { MediaRenderer, getMediaType } from "@/components/MediaRenderer";
+import { AiAssistant } from "@/components/AiAssistant";
 import type { SealResult } from "@/lib/types";
 
 const TRIGGER_OPTS = [
@@ -166,6 +167,13 @@ export default function SealPage() {
           ))}
         </div>
       </div>
+
+      {/* AI assistant (text mode only) */}
+      {contentMode === "text" && (
+        <div className="mb-4">
+          <AiAssistant onDraft={setMessage} />
+        </div>
+      )}
 
       {/* Content mode tabs */}
       <div className="mb-4 flex gap-1 rounded-lg border border-border bg-card p-1">

@@ -30,6 +30,7 @@ export const CONTRACT_ADDRESSES = {
   DeadManSwitch:  (process.env.NEXT_PUBLIC_DEAD_MAN_SWITCH_ADDRESS ?? "0x") as `0x${string}`,
   MultiSigReveal: (process.env.NEXT_PUBLIC_MULTI_SIG_REVEAL_ADDRESS ?? "0x") as `0x${string}`,
   KeyRegistry:    (process.env.NEXT_PUBLIC_KEY_REGISTRY_ADDRESS    ?? "0x") as `0x${string}`,
+  CapsuleNFT:     (process.env.NEXT_PUBLIC_CAPSULE_NFT_ADDRESS     ?? "0x") as `0x${string}`,
 } as const;
 
 // ── ABIs (minimal — only functions we call from the frontend) ─────────────────
@@ -377,6 +378,62 @@ export const KEY_REGISTRY_ABI = [
     inputs: [
       { name: "wallet", type: "address", indexed: true  },
       { name: "pubkey", type: "bytes",   indexed: false },
+    ],
+  },
+] as const;
+
+// ── CapsuleNFT ABI ────────────────────────────────────────────────────────────
+
+export const CAPSULE_NFT_ABI = [
+  {
+    name: "mint",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs:  [{ name: "capsuleId", type: "bytes32" }],
+    outputs: [{ name: "tokenId",   type: "uint256" }],
+  },
+  {
+    name: "isUnlocked",
+    type: "function",
+    stateMutability: "view",
+    inputs:  [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ name: "",        type: "bool"    }],
+  },
+  {
+    name: "capsuleToToken",
+    type: "function",
+    stateMutability: "view",
+    inputs:  [{ name: "capsuleId", type: "bytes32" }],
+    outputs: [{ name: "tokenId",   type: "uint256" }],
+  },
+  {
+    name: "tokenToCapsule",
+    type: "function",
+    stateMutability: "view",
+    inputs:  [{ name: "tokenId",   type: "uint256" }],
+    outputs: [{ name: "capsuleId", type: "bytes32" }],
+  },
+  {
+    name: "ownerOf",
+    type: "function",
+    stateMutability: "view",
+    inputs:  [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ name: "",        type: "address" }],
+  },
+  {
+    name: "tokenURI",
+    type: "function",
+    stateMutability: "view",
+    inputs:  [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ name: "",        type: "string"  }],
+  },
+  {
+    name: "CapsuleMinted",
+    type: "event",
+    inputs: [
+      { name: "capsuleId", type: "bytes32", indexed: true  },
+      { name: "tokenId",   type: "uint256", indexed: true  },
+      { name: "minter",    type: "address", indexed: true  },
     ],
   },
 ] as const;
