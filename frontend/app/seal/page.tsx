@@ -11,20 +11,29 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ConnectButton } from "@/components/ConnectButton";
+import { cn } from "@/lib/utils";
 import { sealCapsule } from "@/lib/capsule";
 import { TriggerType } from "@/lib/types";
 import type { SealResult } from "@/lib/types";
+
+const TRIGGER_OPTS = [
+  { value: TriggerType.TIME,    label: "⏰ Time lock",        desc: "Unlocks at a set time" },
+  { value: TriggerType.DEADMAN, label: "💀 Dead Man's Switch", desc: "Unlocks if owner stops checking in" },
+] as const;
 
 export default function SealPage() {
   const { isConnected } = useAccount();
   const router = useRouter();
 
-  const [message,   setMessage]   = useState("");
-  const [minutes,   setMinutes]   = useState(2);
-  const [result,    setResult]    = useState<SealResult | null>(null);
-  const [status,    setStatus]    = useState("");
-  const [loading,   setLoading]   = useState(false);
-  const [sealed,    setSealed]    = useState(false);
+  const [message,     setMessage]     = useState("");
+  const [minutes,     setMinutes]     = useState(2);
+  const [triggerType, setTriggerType] = useState<TriggerType>(TriggerType.TIME);
+  const [dmsInterval, setDmsInterval] = useState(1);
+
+  const [result,  setResult]  = useState<SealResult | null>(null);
+  const [status,  setStatus]  = useState("");
+  const [loading, setLoading] = useState(false);
+  const [sealed,  setSealed]  = useState(false);
 
   async function handleSeal() {
     if (!message.trim()) { toast.error("Message is empty"); return; }
@@ -33,13 +42,18 @@ export default function SealPage() {
 
     try {
       const unlockTime = new Date(Date.now() + minutes * 60 * 1000);
-      setStatus("Encrypting + uploading to 0G…");
+      setStatus(
+        triggerType === TriggerType.DEADMAN
+          ? "Sealing + arming dead man's switch…"
+          : "Encrypting + uploading to 0G…"
+      );
 
       const res = await sealCapsule({
-        plaintext:   message,
+        plaintext:  message,
         unlockTime,
-        recipients:  [],
-        triggerType: TriggerType.TIME,
+        recipients: [],
+        triggerType,
+        deadman: triggerType === TriggerType.DEADMAN ? { intervalDays: dmsInterval } : undefined,
       });
 
       setResult(res);
@@ -55,7 +69,7 @@ export default function SealPage() {
     <main className="mx-auto max-w-xl px-4 py-14 sm:px-6">
       <h1 className="mb-1 text-2xl font-bold">Seal a Capsule</h1>
       <p className="mb-8 text-sm text-muted-foreground">
-        Encrypted on-chain. Decryptable only when the unlock time is reached.
+        Encrypted on-chain. Decryptable only when the unlock condition is met.
       </p>
 
       {!isConnected && <div className="mb-6"><ConnectButton /></div>}
@@ -71,19 +85,70 @@ export default function SealPage() {
         />
       </div>
 
-      {/* Time lock config */}
-      <div className="mb-6 flex items-center gap-3">
-        <span className="text-sm text-muted-foreground">Unlock in</span>
-        <Input
-          type="number"
-          min={1}
-          value={minutes}
-          onChange={(e) => setMinutes(Number(e.target.value))}
-          disabled={loading}
-          className="w-24"
-        />
-        <span className="text-sm text-muted-foreground">minutes</span>
+      {/* Trigger selector */}
+      <div className="mb-5">
+        <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Unlock trigger</p>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {TRIGGER_OPTS.map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => setTriggerType(opt.value)}
+              aria-pressed={triggerType === opt.value}
+              className={cn(
+                "rounded-lg border p-3 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                triggerType === opt.value
+                  ? "border-indigo-700 bg-indigo-950/40 text-indigo-300"
+                  : "border-border bg-card text-muted-foreground hover:border-indigo-900 hover:text-foreground"
+              )}
+            >
+              <div className="font-semibold">{opt.label}</div>
+              <div className="mt-0.5 text-xs opacity-60">{opt.desc}</div>
+            </button>
+          ))}
+        </div>
       </div>
+
+      {/* Time lock config */}
+      {triggerType === TriggerType.TIME && (
+        <div className="mb-5 flex items-center gap-3">
+          <span className="text-sm text-muted-foreground">Unlock in</span>
+          <Input
+            type="number"
+            min={1}
+            value={minutes}
+            onChange={(e) => setMinutes(Number(e.target.value))}
+            disabled={loading}
+            className="w-24"
+          />
+          <span className="text-sm text-muted-foreground">minutes</span>
+        </div>
+      )}
+
+      {/* Dead Man's Switch config */}
+      {triggerType === TriggerType.DEADMAN && (
+        <div className="mb-5 rounded-lg border border-amber-900/50 bg-amber-950/10 p-4">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-amber-600">Dead Man&apos;s Switch</p>
+          <div className="mb-3 flex items-center gap-3">
+            <span className="text-sm text-muted-foreground">Check-in interval</span>
+            <Input type="number" min={1} value={dmsInterval}
+              onChange={(e) => setDmsInterval(Number(e.target.value))}
+              disabled={loading} className="w-20"
+            />
+            <span className="text-sm text-muted-foreground">days</span>
+          </div>
+          <p className="mb-3 text-xs text-muted-foreground">
+            You must check in every {dmsInterval} day(s) or the capsule unlocks automatically.
+          </p>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-muted-foreground">Min lock window</span>
+            <Input type="number" min={1} value={minutes}
+              onChange={(e) => setMinutes(Number(e.target.value))}
+              disabled={loading} className="w-20"
+            />
+            <span className="text-xs text-muted-foreground">min</span>
+          </div>
+        </div>
+      )}
 
       {/* Submit + animation */}
       <AnimatePresence mode="wait">
