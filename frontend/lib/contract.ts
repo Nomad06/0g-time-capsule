@@ -5,14 +5,14 @@
 
 import {
   createPublicClient,
-  createWalletClient,
-  custom,
   http,
   parseEventLogs,
   type WalletClient,
   type PublicClient,
   type Hash,
 } from "viem";
+import { getWalletClient as wagmiGetWalletClient } from "@wagmi/core";
+import { wagmiConfig } from "./wagmi-config";
 import { zeroGTestnet, CONTRACT_ADDRESSES, TIME_CAPSULE_ABI, KEY_REGISTRY_ABI } from "../constants/contracts";
 import type { OnChainCapsule, TriggerType } from "./types";
 
@@ -25,14 +25,19 @@ export function getPublicClient(): PublicClient {
   });
 }
 
-export function getWalletClient(): WalletClient {
-  if (typeof window === "undefined" || !window.ethereum) {
-    throw new Error("No wallet detected — install MetaMask");
+export async function getWalletClient(): Promise<WalletClient & { account: NonNullable<WalletClient["account"]> }> {
+  const client = await wagmiGetWalletClient(wagmiConfig);
+  if (!client) throw new Error("No wallet connected");
+  if (!client.account) throw new Error("Wallet connected but no account available");
+  const chainId = await client.getChainId();
+  if (chainId !== zeroGTestnet.id) {
+    await client.switchChain({ id: zeroGTestnet.id });
+    // Re-fetch after switch — old client is stale
+    const switched = await wagmiGetWalletClient(wagmiConfig);
+    if (!switched?.account) throw new Error("Switched to 0G Testnet — please press Register again.");
+    return switched as WalletClient & { account: NonNullable<WalletClient["account"]> };
   }
-  return createWalletClient({
-    chain: zeroGTestnet,
-    transport: custom(window.ethereum),
-  });
+  return client as WalletClient & { account: NonNullable<WalletClient["account"]> };
 }
 
 // ── Write: seal ───────────────────────────────────────────────────────────────
@@ -53,9 +58,9 @@ export interface SealTxResult {
 }
 
 export async function sealOnChain(params: SealContractParams): Promise<SealTxResult> {
-  const wallet = getWalletClient();
+  const wallet = await getWalletClient();
   const pub    = getPublicClient();
-  const [account] = await wallet.getAddresses();
+  const account = wallet.account;
 
   const txHash = await wallet.writeContract({
     account,
@@ -97,9 +102,9 @@ export interface RevealTxResult {
 }
 
 export async function revealOnChain(capsuleId: `0x${string}`): Promise<RevealTxResult> {
-  const wallet = getWalletClient();
+  const wallet = await getWalletClient();
   const pub    = getPublicClient();
-  const [account] = await wallet.getAddresses();
+  const account = wallet.account;
 
   const txHash = await wallet.writeContract({
     account,
@@ -190,9 +195,9 @@ export async function setRecipientKeys(
   recipients:    `0x${string}`[],
   encryptedKeys: `0x${string}`[]
 ): Promise<Hash> {
-  const wallet = getWalletClient();
+  const wallet = await getWalletClient();
   const pub    = getPublicClient();
-  const [account] = await wallet.getAddresses();
+  const account = wallet.account;
 
   const txHash = await wallet.writeContract({
     account,
@@ -224,9 +229,9 @@ export async function getRecipientKey(
 // ── Stage 2: key registry ─────────────────────────────────────────────────────
 
 export async function registerEncryptionKey(pubkeyHex: `0x${string}`): Promise<Hash> {
-  const wallet = getWalletClient();
+  const wallet = await getWalletClient();
   const pub    = getPublicClient();
-  const [account] = await wallet.getAddresses();
+  const account = wallet.account;
 
   const txHash = await wallet.writeContract({
     account,

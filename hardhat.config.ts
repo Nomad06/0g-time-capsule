@@ -17,7 +17,7 @@ const config: HardhatUserConfig = {
   networks: {
     zerogTestnet: {
       url: process.env.ZEROG_RPC_URL ?? "https://evmrpc-testnet.0g.ai",
-      chainId: 16600,
+      chainId: 16602,
       accounts: [DEPLOYER_PK],
     },
     localhost: {

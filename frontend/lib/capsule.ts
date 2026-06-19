@@ -78,16 +78,18 @@ export async function sealCapsule(params: SealParams): Promise<SealResult> {
 
   // 6. Stage 3: set up trigger module after seal
   if (triggerType === TriggerType.DEADMAN && params.deadman) {
-    const [account] = await (await import("./contract")).getWalletClient().getAddresses();
+    const { account } = await (await import("./contract")).getWalletClient();
+    if (!account) throw new Error("No wallet connected");
     const intervalSec = BigInt(params.deadman.intervalDays * 86400);
-    await armSwitch(capsuleId, account, intervalSec);
+    await armSwitch(capsuleId, account.address, intervalSec);
   }
 
   if (triggerType === TriggerType.MULTISIG && params.multisig) {
-    const [account] = await (await import("./contract")).getWalletClient().getAddresses();
+    const { account } = await (await import("./contract")).getWalletClient();
+    if (!account) throw new Error("No wallet connected");
     await createVault(
       capsuleId,
-      account,
+      account.address,
       params.multisig.signers,
       params.multisig.threshold
     );

@@ -19,9 +19,9 @@ export async function armSwitch(
   owner:     `0x${string}`,
   interval:  bigint          // seconds
 ): Promise<Hash> {
-  const wallet = getWalletClient();
+  const wallet = await getWalletClient();
   const pub    = getPublicClient();
-  const [account] = await wallet.getAddresses();
+  const account = wallet.account;
 
   const tx = await wallet.writeContract({
     account,
@@ -36,9 +36,9 @@ export async function armSwitch(
 }
 
 export async function checkin(capsuleId: `0x${string}`): Promise<Hash> {
-  const wallet = getWalletClient();
+  const wallet = await getWalletClient();
   const pub    = getPublicClient();
-  const [account] = await wallet.getAddresses();
+  const account = wallet.account;
 
   const tx = await wallet.writeContract({
     account,
@@ -53,9 +53,9 @@ export async function checkin(capsuleId: `0x${string}`): Promise<Hash> {
 }
 
 export async function triggerSwitch(capsuleId: `0x${string}`): Promise<Hash> {
-  const wallet = getWalletClient();
+  const wallet = await getWalletClient();
   const pub    = getPublicClient();
-  const [account] = await wallet.getAddresses();
+  const account = wallet.account;
 
   const tx = await wallet.writeContract({
     account,
@@ -117,9 +117,9 @@ export async function createVault(
   signers:   `0x${string}`[],
   threshold: number
 ): Promise<Hash> {
-  const wallet = getWalletClient();
+  const wallet = await getWalletClient();
   const pub    = getPublicClient();
-  const [account] = await wallet.getAddresses();
+  const account = wallet.account;
 
   const tx = await wallet.writeContract({
     account,
@@ -134,9 +134,9 @@ export async function createVault(
 }
 
 export async function approveReveal(capsuleId: `0x${string}`): Promise<Hash> {
-  const wallet = getWalletClient();
+  const wallet = await getWalletClient();
   const pub    = getPublicClient();
-  const [account] = await wallet.getAddresses();
+  const account = wallet.account;
 
   const tx = await wallet.writeContract({
     account,

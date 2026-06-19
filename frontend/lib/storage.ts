@@ -20,7 +20,9 @@ export async function uploadToStorage(data: Uint8Array): Promise<UploadResult> {
   });
 
   if (!res.ok) {
-    const { error } = await res.json();
+    const text = await res.text();
+    let error = text;
+    try { error = JSON.parse(text).error ?? text; } catch { /* not JSON */ }
     throw new Error(`Storage upload failed: ${error}`);
   }
 

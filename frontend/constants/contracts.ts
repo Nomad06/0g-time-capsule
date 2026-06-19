@@ -3,7 +3,7 @@ import { defineChain } from "viem";
 // ── 0G Testnet chain definition ───────────────────────────────────────────────
 
 export const zeroGTestnet = defineChain({
-  id: 16600,
+  id: 16602,
   name: "0G Testnet",
   nativeCurrency: { name: "0G Testnet Token", symbol: "A0GI", decimals: 18 },
   rpcUrls: {

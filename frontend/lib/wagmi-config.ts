@@ -1,12 +1,14 @@
 import { createConfig, http } from "wagmi";
-import { injected, metaMask } from "wagmi/connectors";
+import { injected, walletConnect } from "wagmi/connectors";
 import { zeroGTestnet } from "../constants/contracts";
+
+const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? "";
 
 export const wagmiConfig = createConfig({
   chains: [zeroGTestnet],
   connectors: [
-    metaMask(),
-    injected({ target: "metaMask" }),
+    injected(),
+    ...(projectId ? [walletConnect({ projectId })] : []),
   ],
   transports: {
     [zeroGTestnet.id]: http(

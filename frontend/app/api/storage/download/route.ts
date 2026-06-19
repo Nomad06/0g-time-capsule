@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Indexer } from "@0glabs/0g-ts-sdk";
+import { Indexer } from "@0gfoundation/0g-storage-ts-sdk";
 
 const INDEXER_URL = process.env.ZG_INDEXER_URL ?? "https://indexer-storage-testnet-standard.0g.ai";
 
