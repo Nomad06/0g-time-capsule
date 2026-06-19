@@ -17,8 +17,9 @@ import { TriggerType } from "@/lib/types";
 import type { SealResult } from "@/lib/types";
 
 const TRIGGER_OPTS = [
-  { value: TriggerType.TIME,    label: "⏰ Time lock",        desc: "Unlocks at a set time" },
-  { value: TriggerType.DEADMAN, label: "💀 Dead Man's Switch", desc: "Unlocks if owner stops checking in" },
+  { value: TriggerType.TIME,     label: "⏰ Time lock",        desc: "Unlocks at a set time" },
+  { value: TriggerType.DEADMAN,  label: "💀 Dead Man's Switch", desc: "Unlocks if owner stops checking in" },
+  { value: TriggerType.MULTISIG, label: "🗳️ Multi-Sig",        desc: "Unlocks when M-of-N signers approve" },
 ] as const;
 
 export default function SealPage() {
@@ -29,11 +30,17 @@ export default function SealPage() {
   const [minutes,     setMinutes]     = useState(2);
   const [triggerType, setTriggerType] = useState<TriggerType>(TriggerType.TIME);
   const [dmsInterval, setDmsInterval] = useState(1);
+  const [msSigners,   setMsSigners]   = useState("");
+  const [msThreshold, setMsThreshold] = useState(2);
 
   const [result,  setResult]  = useState<SealResult | null>(null);
   const [status,  setStatus]  = useState("");
   const [loading, setLoading] = useState(false);
   const [sealed,  setSealed]  = useState(false);
+
+  const msSignerCount = msSigners
+    .split(/[\s,]+/)
+    .filter(s => s.startsWith("0x") && s.length === 42).length;
 
   async function handleSeal() {
     if (!message.trim()) { toast.error("Message is empty"); return; }
@@ -42,10 +49,15 @@ export default function SealPage() {
 
     try {
       const unlockTime = new Date(Date.now() + minutes * 60 * 1000);
+      const multisigSigners = msSigners
+        .split(/[\s,]+/)
+        .map(s => s.trim())
+        .filter(s => s.startsWith("0x") && s.length === 42) as `0x${string}`[];
+
       setStatus(
-        triggerType === TriggerType.DEADMAN
-          ? "Sealing + arming dead man's switch…"
-          : "Encrypting + uploading to 0G…"
+        triggerType === TriggerType.DEADMAN  ? "Sealing + arming dead man's switch…" :
+        triggerType === TriggerType.MULTISIG ? "Sealing + creating multi-sig vault…" :
+        "Encrypting + uploading to 0G…"
       );
 
       const res = await sealCapsule({
@@ -53,7 +65,8 @@ export default function SealPage() {
         unlockTime,
         recipients: [],
         triggerType,
-        deadman: triggerType === TriggerType.DEADMAN ? { intervalDays: dmsInterval } : undefined,
+        deadman:  triggerType === TriggerType.DEADMAN  ? { intervalDays: dmsInterval }                         : undefined,
+        multisig: triggerType === TriggerType.MULTISIG ? { signers: multisigSigners, threshold: msThreshold } : undefined,
       });
 
       setResult(res);
@@ -88,7 +101,7 @@ export default function SealPage() {
       {/* Trigger selector */}
       <div className="mb-5">
         <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Unlock trigger</p>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           {TRIGGER_OPTS.map(opt => (
             <button
               key={opt.value}
@@ -140,6 +153,40 @@ export default function SealPage() {
             You must check in every {dmsInterval} day(s) or the capsule unlocks automatically.
           </p>
           <div className="flex items-center gap-3">
+            <span className="text-xs text-muted-foreground">Min lock window</span>
+            <Input type="number" min={1} value={minutes}
+              onChange={(e) => setMinutes(Number(e.target.value))}
+              disabled={loading} className="w-20"
+            />
+            <span className="text-xs text-muted-foreground">min</span>
+          </div>
+        </div>
+      )}
+
+      {/* Multi-sig config */}
+      {triggerType === TriggerType.MULTISIG && (
+        <div className="mb-5 rounded-lg border border-indigo-900/50 bg-indigo-950/10 p-4">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-indigo-500">Multi-Sig</p>
+          <label className="mb-1 block text-xs text-muted-foreground">Signers (comma-separated addresses)</label>
+          <Textarea
+            rows={3}
+            placeholder="0xAbc…, 0xDef…"
+            value={msSigners}
+            onChange={(e) => setMsSigners(e.target.value)}
+            disabled={loading}
+            className="mb-3 font-mono text-xs"
+          />
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-muted-foreground">Threshold</span>
+            <Input type="number" min={1} value={msThreshold}
+              onChange={(e) => setMsThreshold(Number(e.target.value))}
+              disabled={loading} className="w-20"
+            />
+            <span className="text-sm text-muted-foreground">
+              of {msSignerCount} signer{msSignerCount !== 1 ? "s" : ""}
+            </span>
+          </div>
+          <div className="mt-3 flex items-center gap-3">
             <span className="text-xs text-muted-foreground">Min lock window</span>
             <Input type="number" min={1} value={minutes}
               onChange={(e) => setMinutes(Number(e.target.value))}
