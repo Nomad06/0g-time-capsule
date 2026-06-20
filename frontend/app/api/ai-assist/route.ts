@@ -1,18 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 
-// 0G Compute is OpenAI-compatible. Set ZG_COMPUTE_URL + ZG_COMPUTE_API_KEY
-// to route through 0G Compute network instead of any centralized API.
-const ZG_COMPUTE_URL    = process.env.ZG_COMPUTE_URL    ?? "";
-const ZG_COMPUTE_KEY    = process.env.ZG_COMPUTE_API_KEY ?? "";
+// 0G Compute is OpenAI-compatible.
+const ZG_API_KEY = process.env.ZG_API_KEY ?? "";
+const ZG_BASE_URL = "https://api.inference.0g.ai/v1";
 
-// Fallback: Anthropic-compatible via openai SDK (claude-sonnet-4-6)
-const ANTHROPIC_KEY     = process.env.ANTHROPIC_API_KEY  ?? "";
-const ANTHROPIC_BASE    = "https://api.anthropic.com/v1";
-const ANTHROPIC_MODEL   = "claude-sonnet-4-6";
-
-// 0G Compute testnet model
-const ZG_MODEL = process.env.ZG_COMPUTE_MODEL ?? "Qwen/Qwen2.5-7B-Instruct";
+// 0G Compute model — set ZG_MODEL env var to override
+const ZG_MODEL = process.env.ZG_MODEL ?? "deepseek-v3";
 
 const SYSTEM_PROMPT = `You are a time capsule assistant helping users write meaningful, heartfelt, or strategic messages to seal on the 0G blockchain — to be revealed in the future.
 
@@ -38,14 +32,12 @@ export async function POST(req: NextRequest) {
       ? `Template: "${template}"\nUser description: ${prompt}`
       : prompt;
 
-    // Prefer 0G Compute; fall back to Anthropic
-    const use0G = !!(ZG_COMPUTE_URL && ZG_COMPUTE_KEY);
+    if (!ZG_API_KEY) {
+      return NextResponse.json({ error: "ZG_API_KEY not configured" }, { status: 503 });
+    }
 
-    const client = use0G
-      ? new OpenAI({ baseURL: `${ZG_COMPUTE_URL}/v1`, apiKey: ZG_COMPUTE_KEY })
-      : new OpenAI({ baseURL: ANTHROPIC_BASE, apiKey: ANTHROPIC_KEY, defaultHeaders: { "anthropic-version": "2023-06-01" } });
-
-    const model = use0G ? ZG_MODEL : ANTHROPIC_MODEL;
+    const client = new OpenAI({ baseURL: ZG_BASE_URL, apiKey: ZG_API_KEY });
+    const model = ZG_MODEL;
 
     const completion = await client.chat.completions.create({
       model,
@@ -57,7 +49,7 @@ export async function POST(req: NextRequest) {
     });
 
     const text = completion.choices[0]?.message?.content ?? "";
-    return NextResponse.json({ text, provider: use0G ? "0g-compute" : "anthropic" });
+    return NextResponse.json({ text, provider: "0g-compute" });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return NextResponse.json({ error: msg }, { status: 500 });
