@@ -5,9 +5,9 @@ import path from "path";
 async function main() {
   const deployments = JSON.parse(
     fs.readFileSync(path.join(__dirname, "../deployments/zerogTestnet.json"), "utf8")
-  ) as { TimeCapsule: string };
+  ) as { contracts: { TimeCapsule: string; [k: string]: string }; [k: string]: unknown };
 
-  const timeCapsuleAddress = deployments.TimeCapsule;
+  const timeCapsuleAddress = deployments.contracts.TimeCapsule;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://0g-time-capsule.vercel.app";
 
   console.log("Deploying CapsuleNFT...");
@@ -22,7 +22,7 @@ async function main() {
   console.log("CapsuleNFT deployed to:", address);
 
   // Update deployments file
-  const updated = { ...deployments, CapsuleNFT: address };
+  const updated = { ...deployments, contracts: { ...deployments.contracts, CapsuleNFT: address } };
   fs.writeFileSync(
     path.join(__dirname, "../deployments/zerogTestnet.json"),
     JSON.stringify(updated, null, 2)

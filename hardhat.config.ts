@@ -8,10 +8,11 @@ const DEPLOYER_PK = process.env.DEPLOYER_PRIVATE_KEY ?? "0x" + "0".repeat(64);
 
 const config: HardhatUserConfig = {
   solidity: {
-    version: "0.8.24",
+    version: "0.8.25",
     settings: {
       optimizer: { enabled: true, runs: 200 },
       viaIR: true,
+      evmVersion: "cancun",
     },
   },
   networks: {
