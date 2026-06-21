@@ -1,6 +1,5 @@
 "use client";
 
-import { useAccount } from "wagmi";
 import Link from "next/link";
 import { nftMarketplaceUrl } from "../../../lib/nft";
 import { HashVerifyAnimation } from "../../../components/HashVerifyAnimation";
@@ -14,9 +13,8 @@ interface Props {
 }
 
 export function ProofClient({ capsuleId }: Props) {
-  const { isConnected } = useAccount();
-
   const {
+    isConnected,
     capsule,
     unlocked,
     result,

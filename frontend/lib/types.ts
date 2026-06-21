@@ -50,7 +50,7 @@ export type TriggerConfig =
 export interface SealParams {
   plaintext:        string;            // UTF-8 message
   unlockTime:       Date;              // JS Date → unix timestamp on-chain
-  signer?:          SignerLike;        // signs commitHash to derive wrapKey (optional for seal)
+  signer?:          SignerLike;        // optional — only used by reveal/decrypt flows; not needed for seal
   recipients?:      RecipientParam[];  // empty = public; Stage 2: each gets ECIES key
   trigger?:         TriggerConfig;     // undefined = TIME trigger
   triggerContract?: `0x${string}`;

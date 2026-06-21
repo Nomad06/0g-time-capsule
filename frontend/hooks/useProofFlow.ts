@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useAccount } from "wagmi";
-import { BrowserProvider } from "ethers";
+import { useState, useEffect } from "react";
+import { useAccount, useWalletClient } from "wagmi";
 import { getCapsule, isUnlocked } from "@/lib/contract";
 import { revealCapsule, decryptRevealed, decryptAsRecipient } from "@/lib/capsule";
 import { loadPrivKeyFromStorage, hasSavedPrivKey } from "@/lib/ecies";
@@ -12,6 +11,7 @@ import { formatError } from "@/lib/utils";
 import type { OnChainCapsule, RevealResult } from "@/lib/types";
 
 export interface ProofFlowState {
+  isConnected: boolean;
   capsule:    OnChainCapsule | null;
   unlocked:   boolean;
   result:     RevealResult | null;
@@ -43,6 +43,7 @@ export interface ProofFlowActions {
 
 export function useProofFlow(capsuleId: `0x${string}`): ProofFlowState & ProofFlowActions {
   const { isConnected, address } = useAccount();
+  const { data: walletClient } = useWalletClient();
 
   const [capsule,    setCapsule]    = useState<OnChainCapsule | null>(null);
   const [unlocked,   setUnlocked]   = useState(false);
@@ -55,6 +56,12 @@ export function useProofFlow(capsuleId: `0x${string}`): ProofFlowState & ProofFl
   const [nftLoading, setNftLoading] = useState(false);
 
   const nftEnabled = CONTRACT_ADDRESSES.CapsuleNFT !== "0x";
+
+  // Auto-load token ID for already-minted NFTs on mount / capsuleId change
+  useEffect(() => {
+    if (nftEnabled) initNft();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [capsuleId, nftEnabled]);
 
   async function poll() {
     try {
@@ -76,17 +83,19 @@ export function useProofFlow(capsuleId: `0x${string}`): ProofFlowState & ProofFl
     }
   }
 
-  async function getSigner() {
-    if (!window.ethereum) throw new Error("No wallet detected");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const provider = new BrowserProvider(window.ethereum as any);
-    return provider.getSigner();
+  function getSigner() {
+    if (!walletClient) throw new Error("No wallet connected");
+    // Adapt viem WalletClient to the SignerLike interface expected by lib/capsule
+    return {
+      signMessage: (message: string) =>
+        walletClient.signMessage({ message }),
+    };
   }
 
   async function handleReveal() {
     setLoading(true); setError(""); setStatus("Sending reveal tx…");
     try {
-      const signer = await getSigner();
+      const signer = getSigner();
       setStatus("Sign to decrypt…");
       setResult(await revealCapsule(capsuleId, signer));
     } catch (e: unknown) {
@@ -97,7 +106,7 @@ export function useProofFlow(capsuleId: `0x${string}`): ProofFlowState & ProofFl
   async function handleDecrypt() {
     setLoading(true); setError(""); setStatus("Sign to decrypt…");
     try {
-      const signer = await getSigner();
+      const signer = getSigner();
       setResult(await decryptRevealed(capsuleId, signer));
     } catch (e: unknown) {
       setError(formatError(e));
@@ -141,13 +150,9 @@ export function useProofFlow(capsuleId: `0x${string}`): ProofFlowState & ProofFl
   const unlockDate      = capsule ? new Date(Number(capsule.unlockTime) * 1000) : null;
   const sealDate        = capsule ? new Date(Number(capsule.createdAt) * 1000) : null;
 
-  // Suppress unused-var warning — isConnected is used in the component but
-  // we keep it here so the hook is self-contained and the component can rely
-  // on it directly without re-calling useAccount.
-  void isConnected;
-
   return {
     // state
+    isConnected,
     capsule,
     unlocked,
     result,
