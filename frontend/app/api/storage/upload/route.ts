@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Wallet, JsonRpcProvider } from "ethers";
 // Server-side only — 0G SDK uses Node fs
 import { Indexer, MemData } from "@0gfoundation/0g-storage-ts-sdk";
+import { normalizeHash } from "@/lib/utils";
 
 const INDEXER_URL = process.env.ZG_INDEXER_URL  ?? "https://indexer-storage-testnet-standard.0g.ai";
 const RPC_URL     = process.env.ZG_RPC_URL      ?? "https://evmrpc-testnet.0g.ai";
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
     if (merkleErr) return NextResponse.json({ error: String(merkleErr) }, { status: 500 });
 
     const rawHash = merkle!.rootHash() as string;
-    const rootHash = rawHash.startsWith("0x") ? rawHash : `0x${rawHash}`;
+    const rootHash: `0x${string}` = `0x${normalizeHash(rawHash)}`;
 
     const [txHash, uploadErr] = await indexer.upload(mem, RPC_URL, wallet);
     if (uploadErr) return NextResponse.json({ error: String(uploadErr) }, { status: 500 });
