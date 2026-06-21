@@ -35,25 +35,25 @@ export interface RecipientParam {
   pubkey:  Uint8Array;   // 33-byte compressed secp256k1 from KeyRegistry
 }
 
-// Stage 3: trigger configs ─────────────────────────────────────────────────────
+// ── Trigger configs (discriminated union) ─────────────────────────────────────
 
-export interface DeadManSwitchConfig {
-  intervalDays: number;   // days between required check-ins
+/** Minimal signer interface — compatible with wagmi/viem account objects. */
+export interface SignerLike {
+  signMessage(message: string): Promise<string>;
 }
 
-export interface MultiSigConfig {
-  signers:   `0x${string}`[];
-  threshold: number;
-}
+export type TriggerConfig =
+  | { type: typeof TriggerType.TIME }
+  | { type: typeof TriggerType.DEADMAN;  intervalDays: number }
+  | { type: typeof TriggerType.MULTISIG; signers: `0x${string}`[]; threshold: number };
 
 export interface SealParams {
-  plaintext:        string;               // UTF-8 message
-  unlockTime:       Date;                 // JS Date → unix timestamp on-chain
-  recipients?:      RecipientParam[];     // empty = public; Stage 2: each gets ECIES key
-  triggerType?:     TriggerType;
+  plaintext:        string;            // UTF-8 message
+  unlockTime:       Date;              // JS Date → unix timestamp on-chain
+  signer:           SignerLike;        // signs commitHash to derive wrapKey
+  recipients?:      RecipientParam[];  // empty = public; Stage 2: each gets ECIES key
+  trigger?:         TriggerConfig;     // undefined = TIME trigger
   triggerContract?: `0x${string}`;
-  deadman?:         DeadManSwitchConfig;  // required when triggerType === DEADMAN
-  multisig?:        MultiSigConfig;       // required when triggerType === MULTISIG
 }
 
 // ── Trigger state views ───────────────────────────────────────────────────────
