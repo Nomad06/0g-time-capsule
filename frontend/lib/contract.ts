@@ -40,6 +40,26 @@ export async function getWalletClient(): Promise<WalletClient & { account: NonNu
   return client as WalletClient & { account: NonNullable<WalletClient["account"]> };
 }
 
+// ── Private helpers ────────────────────────────────────────────────────────────
+
+type WriteContractArgs = Parameters<WalletClient["writeContract"]>[0];
+
+/**
+ * Wallet write + receipt wait in one call.
+ * Injects account and chain so callers don't repeat them.
+ */
+async function writeAndWait(args: Omit<WriteContractArgs, "account" | "chain">): Promise<Hash> {
+  const wallet = await getWalletClient();
+  const pub    = getPublicClient();
+  const txHash = await wallet.writeContract({
+    ...args,
+    account: wallet.account,
+    chain:   zeroGTestnet,
+  } as WriteContractArgs);
+  await pub.waitForTransactionReceipt({ hash: txHash });
+  return txHash;
+}
+
 // ── Write: seal ───────────────────────────────────────────────────────────────
 
 export interface SealContractParams {
@@ -166,26 +186,29 @@ export async function verifyOnChain(
   });
 }
 
-export async function getOwnerCapsules(owner: `0x${string}`): Promise<`0x${string}`[]> {
+/**
+ * Generic helper: read capsule arrays by role (owner or recipient).
+ */
+async function readCapsulesByRole(
+  functionName: "getOwnerCapsules" | "getRecipientCapsules",
+  address: `0x${string}`
+): Promise<`0x${string}`[]> {
   const pub = getPublicClient();
   const ids = await pub.readContract({
     address:      CONTRACT_ADDRESSES.TimeCapsule,
     abi:          TIME_CAPSULE_ABI,
-    functionName: "getOwnerCapsules",
-    args:         [owner],
+    functionName,
+    args:         [address],
   });
   return ids as `0x${string}`[];
 }
 
+export async function getOwnerCapsules(owner: `0x${string}`): Promise<`0x${string}`[]> {
+  return readCapsulesByRole("getOwnerCapsules", owner);
+}
+
 export async function getRecipientCapsules(recipient: `0x${string}`): Promise<`0x${string}`[]> {
-  const pub = getPublicClient();
-  const ids = await pub.readContract({
-    address:      CONTRACT_ADDRESSES.TimeCapsule,
-    abi:          TIME_CAPSULE_ABI,
-    functionName: "getRecipientCapsules",
-    args:         [recipient],
-  });
-  return ids as `0x${string}`[];
+  return readCapsulesByRole("getRecipientCapsules", recipient);
 }
 
 // ── Stage 2: recipient keys ───────────────────────────────────────────────────
@@ -195,21 +218,12 @@ export async function setRecipientKeys(
   recipients:    `0x${string}`[],
   encryptedKeys: `0x${string}`[]
 ): Promise<Hash> {
-  const wallet = await getWalletClient();
-  const pub    = getPublicClient();
-  const account = wallet.account;
-
-  const txHash = await wallet.writeContract({
-    account,
-    chain:        zeroGTestnet,
+  return writeAndWait({
     address:      CONTRACT_ADDRESSES.TimeCapsule,
     abi:          TIME_CAPSULE_ABI,
     functionName: "setRecipientKeys",
     args:         [capsuleId, recipients, encryptedKeys],
   });
-
-  await pub.waitForTransactionReceipt({ hash: txHash });
-  return txHash;
 }
 
 export async function getRecipientKey(
@@ -229,21 +243,12 @@ export async function getRecipientKey(
 // ── Stage 2: key registry ─────────────────────────────────────────────────────
 
 export async function registerEncryptionKey(pubkeyHex: `0x${string}`): Promise<Hash> {
-  const wallet = await getWalletClient();
-  const pub    = getPublicClient();
-  const account = wallet.account;
-
-  const txHash = await wallet.writeContract({
-    account,
-    chain:        zeroGTestnet,
+  return writeAndWait({
     address:      CONTRACT_ADDRESSES.KeyRegistry,
     abi:          KEY_REGISTRY_ABI,
     functionName: "registerKey",
     args:         [pubkeyHex],
   });
-
-  await pub.waitForTransactionReceipt({ hash: txHash });
-  return txHash;
 }
 
 export async function getEncryptionKey(wallet: `0x${string}`): Promise<`0x${string}`> {
