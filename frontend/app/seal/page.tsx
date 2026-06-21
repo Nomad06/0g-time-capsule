@@ -124,13 +124,18 @@ export default function SealPage() {
         "Encrypting + uploading to 0G Storage…"
       );
 
+      const trigger: import("@/lib/types").TriggerConfig | undefined =
+        triggerType === TriggerType.DEADMAN
+          ? { type: TriggerType.DEADMAN,  intervalDays: dmsInterval }
+          : triggerType === TriggerType.MULTISIG
+          ? { type: TriggerType.MULTISIG, signers: multisigSigners, threshold: msThreshold }
+          : undefined;
+
       const res = await sealCapsule({
         plaintext,
         unlockTime,
         recipients: [],
-        triggerType,
-        deadman:  triggerType === TriggerType.DEADMAN  ? { intervalDays: dmsInterval }                         : undefined,
-        multisig: triggerType === TriggerType.MULTISIG ? { signers: multisigSigners, threshold: msThreshold } : undefined,
+        trigger,
       });
 
       setResult(res);

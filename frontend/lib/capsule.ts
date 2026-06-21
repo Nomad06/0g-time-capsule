@@ -22,7 +22,10 @@ import {
   makeCommitHash,
   hexToBytes,
   bytesToHex,
+  NONCE_LEN,
 } from "./crypto";
+import { gcm } from "@noble/ciphers/aes";
+import { bytesToUtf8 } from "@noble/ciphers/utils";
 import { eciesEncrypt, eciesDecrypt } from "./ecies";
 import { uploadToStorage, downloadFromStorage } from "./storage";
 import {
@@ -32,25 +35,86 @@ import {
   verifyOnChain,
   setRecipientKeys,
   getRecipientKey,
+  getWalletClient,
 } from "./contract";
 import { armSwitch, createVault } from "./triggers";
 import { roundForTime } from "./drand";
 import { TriggerType } from "./types";
-import type { SealParams, SealResult, RevealResult } from "./types";
+import type { SealParams, SealResult, RevealResult, SignerLike, TriggerConfig, RecipientParam } from "./types";
+
+// ── Private stage helpers ─────────────────────────────────────────────────────
+
+interface EncryptionResult {
+  packed:         Uint8Array;
+  timelockHeader: Uint8Array;
+  commitHash:     `0x${string}`;
+  dataKey:        Uint8Array;
+  drandRound:     number;
+}
+
+async function _buildEncryption(
+  plaintext:  string,
+  unlockTime: Date
+): Promise<EncryptionResult> {
+  const drandRound = await roundForTime(unlockTime);
+  const { packed, timelockHeader, commitHash, dataKey } = encryptForSeal(plaintext, drandRound);
+  return { packed, timelockHeader, commitHash, dataKey, drandRound };
+}
+
+async function _distributeRecipientKeys(
+  capsuleId:  `0x${string}`,
+  recipients: RecipientParam[],
+  dataKey:    Uint8Array
+): Promise<void> {
+  if (recipients.length === 0) return;
+  const recipientAddresses = recipients.map(r => r.address);
+  const encryptedKeys      = recipients.map(r => bytesToHex(eciesEncrypt(r.pubkey, dataKey)));
+  await setRecipientKeys(capsuleId, recipientAddresses, encryptedKeys);
+}
+
+async function _setupTrigger(
+  capsuleId: `0x${string}`,
+  trigger:   TriggerConfig
+): Promise<void> {
+  if (trigger.type === TriggerType.DEADMAN) {
+    const { account } = await getWalletClient();
+    if (!account) throw new Error("No wallet connected");
+    const intervalSec = BigInt(trigger.intervalDays * 86400);
+    await armSwitch(capsuleId, account.address, intervalSec);
+  } else if (trigger.type === TriggerType.MULTISIG) {
+    const { account } = await getWalletClient();
+    if (!account) throw new Error("No wallet connected");
+    await createVault(capsuleId, account.address, trigger.signers, trigger.threshold);
+  }
+}
+
+// ── Private decrypt helper ────────────────────────────────────────────────────
+
+async function _decryptOwnerCapsule(
+  capsuleId:     `0x${string}`,
+  timelockHeader: Uint8Array,
+  packed:        Uint8Array,
+  signer:        SignerLike
+): Promise<{ plaintext: string; commitHash: `0x${string}`; verified: boolean }> {
+  const message      = revealSignMessage(capsuleId);
+  const signatureHex = await signer.signMessage(message);
+  const plaintext    = decryptFromReveal(packed, timelockHeader, signatureHex);
+  const hash         = makeCommitHash(plaintext);
+  const verified     = await verifyOnChain(capsuleId, hash);
+  return { plaintext, commitHash: hash, verified };
+}
 
 // ── Seal ──────────────────────────────────────────────────────────────────────
 
 export async function sealCapsule(params: SealParams): Promise<SealResult> {
-  const { plaintext, unlockTime, recipients = [], triggerType = 0, triggerContract } = params;
+  const { plaintext, unlockTime, recipients = [], trigger, triggerContract } = params;
 
   if (!plaintext.trim())       throw new Error("Plaintext cannot be empty");
   if (unlockTime <= new Date()) throw new Error("Unlock time must be in the future");
 
-  // 1. Map unlock time → drand round
-  const drandRound = await roundForTime(unlockTime);
-
-  // 2. Encrypt — also returns raw dataKey for Stage 2 ECIES wrapping
-  const { packed, timelockHeader, commitHash, dataKey } = encryptForSeal(plaintext, drandRound);
+  // 1 + 2. Compute drand round + encrypt
+  const { packed, timelockHeader, commitHash, dataKey, drandRound } =
+    await _buildEncryption(plaintext, unlockTime);
 
   // 3. Upload to 0G Storage
   const { rootHash: storageRoot } = await uploadToStorage(packed);
@@ -58,6 +122,8 @@ export async function sealCapsule(params: SealParams): Promise<SealResult> {
   // 4. Commit on-chain
   const recipientAddresses = recipients.map(r => r.address);
   const unlockTimestamp    = BigInt(Math.floor(unlockTime.getTime() / 1000));
+  const triggerType        = trigger?.type ?? TriggerType.TIME;
+
   const { txHash, capsuleId } = await sealOnChain({
     storageRoot,
     commitHash,
@@ -69,30 +135,11 @@ export async function sealCapsule(params: SealParams): Promise<SealResult> {
   });
 
   // 5. Stage 2: deposit ECIES-encrypted dataKey per recipient
-  if (recipients.length > 0) {
-    const encryptedKeys = recipients.map(r =>
-      bytesToHex(eciesEncrypt(r.pubkey, dataKey))
-    );
-    await setRecipientKeys(capsuleId, recipientAddresses, encryptedKeys);
-  }
+  await _distributeRecipientKeys(capsuleId, recipients, dataKey);
 
   // 6. Stage 3: set up trigger module after seal
-  if (triggerType === TriggerType.DEADMAN && params.deadman) {
-    const { account } = await (await import("./contract")).getWalletClient();
-    if (!account) throw new Error("No wallet connected");
-    const intervalSec = BigInt(params.deadman.intervalDays * 86400);
-    await armSwitch(capsuleId, account.address, intervalSec);
-  }
-
-  if (triggerType === TriggerType.MULTISIG && params.multisig) {
-    const { account } = await (await import("./contract")).getWalletClient();
-    if (!account) throw new Error("No wallet connected");
-    await createVault(
-      capsuleId,
-      account.address,
-      params.multisig.signers,
-      params.multisig.threshold
-    );
+  if (trigger && trigger.type !== TriggerType.TIME) {
+    await _setupTrigger(capsuleId, trigger);
   }
 
   return { capsuleId, storageRoot, commitHash, drandRound, txHash };
@@ -101,31 +148,22 @@ export async function sealCapsule(params: SealParams): Promise<SealResult> {
 // ── Reveal ────────────────────────────────────────────────────────────────────
 
 export async function revealCapsule(
-  capsuleId:   `0x${string}`,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  signer:      any  // wagmi/ethers signer — signs the reveal message
+  capsuleId: `0x${string}`,
+  signer:    SignerLike
 ): Promise<RevealResult> {
   // 1. Trigger on-chain reveal (fails if still locked)
   const { timelockHeader: headerHex } = await revealOnChain(capsuleId);
-
-  // 2. Owner signs to authorize local decryption
-  const message      = revealSignMessage(capsuleId);
-  const signatureHex = await signer.signMessage(message) as string;
-
-  // 3. Decrypt
   const timelockHeader = Buffer.from(headerHex.slice(2), "hex");
 
-  // Need storageRoot to fetch from 0G
-  const cap = await getCapsule(capsuleId);
+  // 2. Need storageRoot to fetch from 0G
+  const cap    = await getCapsule(capsuleId);
   const packed = await downloadFromStorage(cap.storageRoot);
 
-  const plaintext = decryptFromReveal(packed, timelockHeader, signatureHex);
+  // 3. Owner signs to authorize local decryption
+  const { plaintext, commitHash, verified } =
+    await _decryptOwnerCapsule(capsuleId, timelockHeader, packed, signer);
 
-  // 4. Verify proof-of-existence
-  const hash     = makeCommitHash(plaintext);
-  const verified = await verifyOnChain(capsuleId, hash);
-
-  return { capsuleId, plaintext, commitHash: hash, verified };
+  return { capsuleId, plaintext, commitHash, verified };
 }
 
 /**
@@ -155,11 +193,8 @@ export async function decryptAsRecipient(
   const packed   = await downloadFromStorage(cap.storageRoot);
 
   // AES-decrypt with the ECIES-recovered dataKey
-  const { gcm } = await import("@noble/ciphers/aes");
-  const NONCE_LEN = 12;
   const nonce1    = packed.slice(0, NONCE_LEN);
   const ct        = packed.slice(NONCE_LEN);
-  const { bytesToUtf8 } = await import("@noble/ciphers/utils");
   const plaintext = bytesToUtf8(gcm(dataKey, nonce1).decrypt(ct));
 
   const hash     = makeCommitHash(plaintext);
@@ -174,19 +209,16 @@ export async function decryptAsRecipient(
  */
 export async function decryptRevealed(
   capsuleId: `0x${string}`,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  signer:    any
+  signer:    SignerLike
 ): Promise<RevealResult> {
   const cap = await getCapsule(capsuleId);
   if (cap.state !== 1) throw new Error("Capsule not yet revealed on-chain");
 
   const timelockHeader = Buffer.from(cap.timelockHeader.slice(2), "hex");
   const packed         = await downloadFromStorage(cap.storageRoot);
-  const message        = revealSignMessage(capsuleId);
-  const signatureHex   = await signer.signMessage(message) as string;
-  const plaintext      = decryptFromReveal(packed, timelockHeader, signatureHex);
-  const hash           = makeCommitHash(plaintext);
-  const verified       = await verifyOnChain(capsuleId, hash);
 
-  return { capsuleId, plaintext, commitHash: hash, verified };
+  const { plaintext, commitHash, verified } =
+    await _decryptOwnerCapsule(capsuleId, timelockHeader, packed, signer);
+
+  return { capsuleId, plaintext, commitHash, verified };
 }
