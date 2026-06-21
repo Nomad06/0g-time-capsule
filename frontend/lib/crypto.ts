@@ -28,7 +28,7 @@ import { hkdf } from "@noble/hashes/hkdf";
 import { sha256 } from "@noble/hashes/sha256";
 import { keccak_256 } from "@noble/hashes/sha3";
 
-const NONCE_LEN = 12;
+export const NONCE_LEN = 12;
 const SEED_LEN  = 32;
 const ROUND_LEN = 8;
 
