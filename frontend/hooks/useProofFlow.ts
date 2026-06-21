@@ -83,19 +83,11 @@ export function useProofFlow(capsuleId: `0x${string}`): ProofFlowState & ProofFl
     }
   }
 
-  function getSigner() {
-    if (!walletClient) throw new Error("No wallet connected");
-    // Adapt viem WalletClient to the SignerLike interface expected by lib/capsule
-    return {
-      signMessage: (message: string) =>
-        walletClient.signMessage({ message }),
-    };
-  }
-
   async function handleReveal() {
+    if (!walletClient) { setError("Wallet not connected"); return; }
     setLoading(true); setError(""); setStatus("Sending reveal tx…");
     try {
-      const signer = getSigner();
+      const signer = { signMessage: (message: string) => walletClient.signMessage({ message }) };
       setStatus("Sign to decrypt…");
       setResult(await revealCapsule(capsuleId, signer));
     } catch (e: unknown) {
@@ -104,9 +96,10 @@ export function useProofFlow(capsuleId: `0x${string}`): ProofFlowState & ProofFl
   }
 
   async function handleDecrypt() {
+    if (!walletClient) { setError("Wallet not connected"); return; }
     setLoading(true); setError(""); setStatus("Sign to decrypt…");
     try {
-      const signer = getSigner();
+      const signer = { signMessage: (message: string) => walletClient.signMessage({ message }) };
       setResult(await decryptRevealed(capsuleId, signer));
     } catch (e: unknown) {
       setError(formatError(e));
