@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { sealCapsule } from "@/lib/capsule";
 import { TriggerType } from "@/lib/types";
 import type { SealResult, TriggerConfig } from "@/lib/types";
+import { formatError } from "@/lib/utils";
 
 const MAX_FILE_MB = 50;
 
@@ -17,11 +18,11 @@ export interface SealFormState {
   fileDataUri:   string | null;
   fileName:      string;
   // trigger
-  minutes:       number;
-  triggerType:   TriggerType;
-  dmsInterval:   number;
-  msSigners:     string;
-  msThreshold:   number;
+  minutesFromNow: number;
+  trigger:        TriggerType;
+  dmsInterval:    number;
+  msSignersRaw:   string;
+  msThreshold:    number;
   // derived
   msSignerCount: number;
   // async state
@@ -34,17 +35,17 @@ export interface SealFormState {
 }
 
 export interface SealFormActions {
-  setContentMode:  (v: "text" | "file") => void;
-  setMessage:      (v: string) => void;
-  setMinutes:      (v: number) => void;
-  setTriggerType:  (v: TriggerType) => void;
-  setDmsInterval:  (v: number) => void;
-  setMsSigners:    (v: string) => void;
-  setMsThreshold:  (v: number) => void;
-  applyTemplate:   (tpl: { message: string; minutes: number }) => void;
-  handleFileChange:(e: React.ChangeEvent<HTMLInputElement>) => void;
-  clearFile:       () => void;
-  handleSeal:      () => Promise<void>;
+  setContentMode:   (v: "text" | "file") => void;
+  setMessage:       (v: string) => void;
+  setMinutesFromNow:(v: number) => void;
+  setTrigger:       (v: TriggerType) => void;
+  setDmsInterval:   (v: number) => void;
+  setMsSignersRaw:  (v: string) => void;
+  setMsThreshold:   (v: number) => void;
+  applyTemplate:    (tpl: { message: string; minutesFromNow: number }) => void;
+  handleFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  clearFile:        () => void;
+  handleSeal:       () => Promise<void>;
 }
 
 export function useSealForm(): SealFormState & SealFormActions {
@@ -59,26 +60,26 @@ export function useSealForm(): SealFormState & SealFormActions {
   const [fileName,    setFileName]    = useState("");
 
   // trigger
-  const [minutes,     setMinutes]     = useState(2);
-  const [triggerType, setTriggerType] = useState<TriggerType>(TriggerType.TIME);
-  const [dmsInterval, setDmsInterval] = useState(1);
-  const [msSigners,   setMsSigners]   = useState("");
-  const [msThreshold, setMsThreshold] = useState(2);
+  const [minutesFromNow, setMinutesFromNow] = useState(2);
+  const [trigger,        setTrigger]        = useState<TriggerType>(TriggerType.TIME);
+  const [dmsInterval,    setDmsInterval]    = useState(1);
+  const [msSignersRaw,   setMsSignersRaw]   = useState("");
+  const [msThreshold,    setMsThreshold]    = useState(2);
 
   const [result,  setResult]  = useState<SealResult | null>(null);
   const [status,  setStatus]  = useState("");
   const [loading, setLoading] = useState(false);
   const [sealed,  setSealed]  = useState(false);
 
-  const msSignerCount = msSigners
+  const msSignerCount = msSignersRaw
     .split(/[\s,]+/)
     .filter(s => s.startsWith("0x") && s.length === 42).length;
 
-  function applyTemplate(tpl: { message: string; minutes: number }) {
+  function applyTemplate(tpl: { message: string; minutesFromNow: number }) {
     setContentMode("text");
     setMessage(tpl.message);
-    setMinutes(tpl.minutes);
-    setTriggerType(TriggerType.TIME);
+    setMinutesFromNow(tpl.minutesFromNow);
+    setTrigger(TriggerType.TIME);
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -110,22 +111,22 @@ export function useSealForm(): SealFormState & SealFormActions {
     setLoading(true); setResult(null);
 
     try {
-      const unlockTime = new Date(Date.now() + minutes * 60 * 1000);
-      const multisigSigners = msSigners
+      const unlockTime = new Date(Date.now() + minutesFromNow * 60 * 1000);
+      const multisigSigners = msSignersRaw
         .split(/[\s,]+/)
         .map(s => s.trim())
         .filter(s => s.startsWith("0x") && s.length === 42) as `0x${string}`[];
 
       setStatus(
-        triggerType === TriggerType.DEADMAN  ? "Sealing + arming dead man's switch…" :
-        triggerType === TriggerType.MULTISIG ? "Sealing + creating multi-sig vault…" :
+        trigger === TriggerType.DEADMAN  ? "Sealing + arming dead man's switch…" :
+        trigger === TriggerType.MULTISIG ? "Sealing + creating multi-sig vault…" :
         "Encrypting + uploading to 0G Storage…"
       );
 
-      const trigger: TriggerConfig | undefined =
-        triggerType === TriggerType.DEADMAN
+      const triggerCfg: TriggerConfig | undefined =
+        trigger === TriggerType.DEADMAN
           ? { type: TriggerType.DEADMAN,  intervalDays: dmsInterval }
-          : triggerType === TriggerType.MULTISIG
+          : trigger === TriggerType.MULTISIG
           ? { type: TriggerType.MULTISIG, signers: multisigSigners, threshold: msThreshold }
           : undefined;
 
@@ -133,7 +134,7 @@ export function useSealForm(): SealFormState & SealFormActions {
         plaintext,
         unlockTime,
         recipients: [],
-        trigger,
+        trigger: triggerCfg,
       });
 
       setResult(res);
@@ -141,7 +142,7 @@ export function useSealForm(): SealFormState & SealFormActions {
       toast.success("Capsule sealed!", { description: `ID: ${res.capsuleId.slice(0, 18)}…` });
       setTimeout(() => router.push(`/proof/${res.capsuleId}`), 1800);
     } catch (e: unknown) {
-      toast.error("Seal failed", { description: e instanceof Error ? e.message : String(e) });
+      toast.error("Seal failed", { description: formatError(e) });
     } finally { setLoading(false); setStatus(""); }
   }
 
@@ -151,10 +152,10 @@ export function useSealForm(): SealFormState & SealFormActions {
     message,
     fileDataUri,
     fileName,
-    minutes,
-    triggerType,
+    minutesFromNow,
+    trigger,
     dmsInterval,
-    msSigners,
+    msSignersRaw,
     msThreshold,
     msSignerCount,
     result,
@@ -165,10 +166,10 @@ export function useSealForm(): SealFormState & SealFormActions {
     // actions
     setContentMode,
     setMessage,
-    setMinutes,
-    setTriggerType,
+    setMinutesFromNow,
+    setTrigger,
     setDmsInterval,
-    setMsSigners,
+    setMsSignersRaw,
     setMsThreshold,
     applyTemplate,
     handleFileChange,

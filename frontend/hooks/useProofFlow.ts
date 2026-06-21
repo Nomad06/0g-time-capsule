@@ -8,6 +8,7 @@ import { revealCapsule, decryptRevealed, decryptAsRecipient } from "@/lib/capsul
 import { loadPrivKeyFromStorage, hasSavedPrivKey } from "@/lib/ecies";
 import { mintCapsuleNFT, getCapsuleTokenId } from "@/lib/nft";
 import { CONTRACT_ADDRESSES } from "@/constants/contracts";
+import { formatError } from "@/lib/utils";
 import type { OnChainCapsule, RevealResult } from "@/lib/types";
 
 export interface ProofFlowState {
@@ -61,7 +62,7 @@ export function useProofFlow(capsuleId: `0x${string}`): ProofFlowState & ProofFl
       setCapsule(cap);
       setUnlocked(open);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(formatError(e));
     }
   }
 
@@ -89,7 +90,7 @@ export function useProofFlow(capsuleId: `0x${string}`): ProofFlowState & ProofFl
       setStatus("Sign to decrypt…");
       setResult(await revealCapsule(capsuleId, signer));
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(formatError(e));
     } finally { setLoading(false); }
   }
 
@@ -99,7 +100,7 @@ export function useProofFlow(capsuleId: `0x${string}`): ProofFlowState & ProofFl
       const signer = await getSigner();
       setResult(await decryptRevealed(capsuleId, signer));
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(formatError(e));
     } finally { setLoading(false); }
   }
 
@@ -111,7 +112,7 @@ export function useProofFlow(capsuleId: `0x${string}`): ProofFlowState & ProofFl
       if (!privKey) throw new Error("No local encryption key found. Visit /register to import or regenerate.");
       setResult(await decryptAsRecipient(capsuleId, address, privKey));
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(formatError(e));
     } finally { setLoading(false); }
   }
 
@@ -121,7 +122,7 @@ export function useProofFlow(capsuleId: `0x${string}`): ProofFlowState & ProofFl
       const { tokenId } = await mintCapsuleNFT(capsuleId);
       setNftTokenId(tokenId);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(formatError(e));
     } finally { setNftLoading(false); }
   }
 
