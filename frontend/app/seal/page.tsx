@@ -1,22 +1,19 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { useAccount } from "wagmi";
-import { useRouter } from "next/navigation";
+import type React from "react";
 import Link from "next/link";
+import { useAccount } from "wagmi";
 import { Lock, LockOpen, Upload, FileText, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ConnectButton } from "@/components/ConnectButton";
 import { cn } from "@/lib/utils";
-import { sealCapsule } from "@/lib/capsule";
 import { TriggerType } from "@/lib/types";
 import { MediaRenderer, getMediaType } from "@/components/MediaRenderer";
 import { AiAssistant } from "@/components/AiAssistant";
-import type { SealResult } from "@/lib/types";
+import { useSealForm } from "@/hooks/useSealForm";
 
 const TRIGGER_OPTS = [
   { value: TriggerType.TIME,     label: "⏰ Time lock",        desc: "Unlocks at a set time" },
@@ -28,124 +25,51 @@ const TEMPLATES = [
   {
     label: "✉️ Letter to future self",
     message: "Dear future me,\n\nToday is [date]. As I write this, I am thinking about...\n\nI hope that by the time you read this, you have...\n\nRemember: ",
-    minutes: 525600, // 1 year in minutes
+    minutesFromNow: 525600, // 1 year in minutes
   },
   {
     label: "📈 Investment thesis",
     message: "Asset: \nDate: \nMy thesis:\n\nKey assumptions:\n1. \n2. \n\nI will consider this thesis proven if...",
-    minutes: 262800, // 6 months
+    minutesFromNow: 262800, // 6 months
   },
   {
     label: "💌 Love letter",
     message: "My dearest,\n\nI am sealing these words for our anniversary.\n\n",
-    minutes: 525600,
+    minutesFromNow: 525600,
   },
   {
     label: "📣 Announcement",
     message: "We are excited to announce that on [reveal date], [company/project] will...",
-    minutes: 10080, // 1 week
+    minutesFromNow: 10080, // 1 week
   },
 ] as const;
 
-const MAX_FILE_MB = 50;
-
 export default function SealPage() {
+  const {
+    contentMode,  setContentMode,
+    message,      setMessage,
+    fileDataUri,
+    fileName,
+    minutesFromNow, setMinutesFromNow,
+    trigger,      setTrigger,
+    dmsInterval,  setDmsInterval,
+    msSignersRaw, setMsSignersRaw,
+    msThreshold,  setMsThreshold,
+    msSignerCount,
+    result,
+    status,
+    loading,
+    sealed,
+    fileInputRef,
+    applyTemplate,
+    handleFileChange,
+    clearFile,
+    handleSeal,
+  } = useSealForm();
+
   const { isConnected } = useAccount();
-  const router = useRouter();
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // content mode
-  const [contentMode, setContentMode] = useState<"text" | "file">("text");
-  const [message,     setMessage]     = useState("");
-  const [fileDataUri, setFileDataUri] = useState<string | null>(null);
-  const [fileName,    setFileName]    = useState("");
-
-  // trigger
-  const [minutes,     setMinutes]     = useState(2);
-  const [triggerType, setTriggerType] = useState<TriggerType>(TriggerType.TIME);
-  const [dmsInterval, setDmsInterval] = useState(1);
-  const [msSigners,   setMsSigners]   = useState("");
-  const [msThreshold, setMsThreshold] = useState(2);
-
-  const [result,  setResult]  = useState<SealResult | null>(null);
-  const [status,  setStatus]  = useState("");
-  const [loading, setLoading] = useState(false);
-  const [sealed,  setSealed]  = useState(false);
-
-  const msSignerCount = msSigners
-    .split(/[\s,]+/)
-    .filter(s => s.startsWith("0x") && s.length === 42).length;
-
-  function applyTemplate(tpl: typeof TEMPLATES[number]) {
-    setContentMode("text");
-    setMessage(tpl.message);
-    setMinutes(tpl.minutes);
-    setTriggerType(TriggerType.TIME);
-  }
-
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > MAX_FILE_MB * 1024 * 1024) {
-      toast.error(`File too large (max ${MAX_FILE_MB} MB)`);
-      return;
-    }
-    setFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = () => { setFileDataUri(reader.result as string); };
-    reader.readAsDataURL(file);
-  }
-
-  function clearFile() {
-    setFileDataUri(null);
-    setFileName("");
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  }
-
-  async function handleSeal() {
-    const plaintext = contentMode === "file" ? fileDataUri ?? "" : message;
-    if (!plaintext.trim()) {
-      toast.error(contentMode === "file" ? "No file selected" : "Message is empty");
-      return;
-    }
-    if (!isConnected) { toast.error("Connect wallet first"); return; }
-    setLoading(true); setResult(null);
-
-    try {
-      const unlockTime = new Date(Date.now() + minutes * 60 * 1000);
-      const multisigSigners = msSigners
-        .split(/[\s,]+/)
-        .map(s => s.trim())
-        .filter(s => s.startsWith("0x") && s.length === 42) as `0x${string}`[];
-
-      setStatus(
-        triggerType === TriggerType.DEADMAN  ? "Sealing + arming dead man's switch…" :
-        triggerType === TriggerType.MULTISIG ? "Sealing + creating multi-sig vault…" :
-        "Encrypting + uploading to 0G Storage…"
-      );
-
-      const trigger: import("@/lib/types").TriggerConfig | undefined =
-        triggerType === TriggerType.DEADMAN
-          ? { type: TriggerType.DEADMAN,  intervalDays: dmsInterval }
-          : triggerType === TriggerType.MULTISIG
-          ? { type: TriggerType.MULTISIG, signers: multisigSigners, threshold: msThreshold }
-          : undefined;
-
-      const res = await sealCapsule({
-        plaintext,
-        unlockTime,
-        recipients: [],
-        trigger,
-      });
-
-      setResult(res);
-      setSealed(true);
-      toast.success("Capsule sealed!", { description: `ID: ${res.capsuleId.slice(0, 18)}…` });
-      setTimeout(() => router.push(`/proof/${res.capsuleId}`), 1800);
-    } catch (e: unknown) {
-      toast.error("Seal failed", { description: e instanceof Error ? e.message : String(e) });
-    } finally { setLoading(false); setStatus(""); }
-  }
+  const MAX_FILE_MB = 50;
 
   return (
     <main className="mx-auto max-w-xl px-4 py-14 sm:px-6">
@@ -227,7 +151,7 @@ export default function SealPage() {
                   <p className="mt-1 text-xs text-muted-foreground/50">Image, audio, video, PDF · max {MAX_FILE_MB} MB</p>
                 </div>
                 <input
-                  ref={fileInputRef}
+                  ref={fileInputRef as React.RefObject<HTMLInputElement>}
                   type="file"
                   accept="image/*,audio/*,video/*,application/pdf"
                   className="sr-only"
@@ -262,11 +186,11 @@ export default function SealPage() {
           {TRIGGER_OPTS.map(opt => (
             <button
               key={opt.value}
-              onClick={() => setTriggerType(opt.value)}
-              aria-pressed={triggerType === opt.value}
+              onClick={() => setTrigger(opt.value)}
+              aria-pressed={trigger === opt.value}
               className={cn(
                 "rounded-lg border p-3 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                triggerType === opt.value
+                trigger === opt.value
                   ? "border-indigo-700 bg-indigo-950/40 text-indigo-300"
                   : "border-border bg-card text-muted-foreground hover:border-indigo-900 hover:text-foreground"
               )}
@@ -279,14 +203,14 @@ export default function SealPage() {
       </div>
 
       {/* Time lock config */}
-      {triggerType === TriggerType.TIME && (
+      {trigger === TriggerType.TIME && (
         <div className="mb-5 flex items-center gap-3">
           <span className="text-sm text-muted-foreground">Unlock in</span>
           <Input
             type="number"
             min={1}
-            value={minutes}
-            onChange={(e) => setMinutes(Number(e.target.value))}
+            value={minutesFromNow}
+            onChange={(e) => setMinutesFromNow(Number(e.target.value))}
             disabled={loading}
             className="w-24"
           />
@@ -295,7 +219,7 @@ export default function SealPage() {
       )}
 
       {/* Dead Man's Switch config */}
-      {triggerType === TriggerType.DEADMAN && (
+      {trigger === TriggerType.DEADMAN && (
         <div className="mb-5 rounded-lg border border-amber-900/50 bg-amber-950/10 p-4">
           <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-amber-600">Dead Man&apos;s Switch</p>
           <div className="mb-3 flex items-center gap-3">
@@ -311,8 +235,8 @@ export default function SealPage() {
           </p>
           <div className="flex items-center gap-3">
             <span className="text-xs text-muted-foreground">Min lock window</span>
-            <Input type="number" min={1} value={minutes}
-              onChange={(e) => setMinutes(Number(e.target.value))}
+            <Input type="number" min={1} value={minutesFromNow}
+              onChange={(e) => setMinutesFromNow(Number(e.target.value))}
               disabled={loading} className="w-20"
             />
             <span className="text-xs text-muted-foreground">min</span>
@@ -321,15 +245,15 @@ export default function SealPage() {
       )}
 
       {/* Multi-sig config */}
-      {triggerType === TriggerType.MULTISIG && (
+      {trigger === TriggerType.MULTISIG && (
         <div className="mb-5 rounded-lg border border-indigo-900/50 bg-indigo-950/10 p-4">
           <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-indigo-500">Multi-Sig</p>
           <label className="mb-1 block text-xs text-muted-foreground">Signers (comma-separated addresses)</label>
           <Textarea
             rows={3}
             placeholder="0xAbc…, 0xDef…"
-            value={msSigners}
-            onChange={(e) => setMsSigners(e.target.value)}
+            value={msSignersRaw}
+            onChange={(e) => setMsSignersRaw(e.target.value)}
             disabled={loading}
             className="mb-3 font-mono text-xs"
           />
@@ -345,8 +269,8 @@ export default function SealPage() {
           </div>
           <div className="mt-3 flex items-center gap-3">
             <span className="text-xs text-muted-foreground">Min lock window</span>
-            <Input type="number" min={1} value={minutes}
-              onChange={(e) => setMinutes(Number(e.target.value))}
+            <Input type="number" min={1} value={minutesFromNow}
+              onChange={(e) => setMinutesFromNow(Number(e.target.value))}
               disabled={loading} className="w-20"
             />
             <span className="text-xs text-muted-foreground">min</span>
