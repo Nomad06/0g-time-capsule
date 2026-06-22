@@ -35,10 +35,16 @@ export async function getWalletClient(): Promise<WalletClient & { account: NonNu
   if (!client.account) throw new Error("Wallet connected but no account available");
   const chainId = await client.getChainId();
   if (chainId !== zeroGTestnet.id) {
-    await client.switchChain({ id: zeroGTestnet.id });
+    try {
+      await client.switchChain({ id: zeroGTestnet.id });
+    } catch {
+      throw new Error(
+        `Wrong network. Switch to 0G Testnet (chain ID ${zeroGTestnet.id}) in your wallet, then try again.`
+      );
+    }
     // Re-fetch after switch — old client is stale
     const switched = await wagmiGetWalletClient(wagmiConfig);
-    if (!switched?.account) throw new Error("Switched to 0G Testnet — please press Register again.");
+    if (!switched?.account) throw new Error("Switched to 0G Testnet — please try again.");
     return switched as WalletClient & { account: NonNullable<WalletClient["account"]> };
   }
   return client as WalletClient & { account: NonNullable<WalletClient["account"]> };
