@@ -110,44 +110,20 @@ export function encryptForSeal(plaintext: string, drandRound: number): {
 // ── Reveal ────────────────────────────────────────────────────────────────────
 
 /**
- * The message the owner signs to authorize decryption.
- * Deterministic per capsule; safe to display to users.
- */
-export function revealSignMessage(capsuleId: `0x${string}`): string {
-  return `0g-time-capsule-reveal:${capsuleId.toLowerCase()}`;
-}
-
-/**
- * Derive the wrapKey from the owner's signature over revealSignMessage().
- * HKDF mixes in capsuleSeed + round for domain separation.
- */
-export function wrapKeyFromSignature(
-  signatureHex: string,
-  capsuleSeed:  Uint8Array,
-  drandRound:   number
-): Uint8Array {
-  const sig = hexToBytes(signatureHex);
-  // IKM = sig bytes; salt = capsuleSeed XOR round (unique per capsule+round pair)
-  const salt = capsuleSeed.map((b, i) => b ^ (u64BE(drandRound)[i % ROUND_LEN] ?? 0));
-  return hkdf(sha256, sig, salt, utf8ToBytes("0g-time-capsule-v1"), 32);
-}
-
-/**
  * Decrypt capsule payload after on-chain reveal.
  *
  * @param packed          nonce1 ++ ciphertext from 0G Storage
  * @param timelockHeader  from CapsuleRevealed event (hex or bytes)
- * @param signatureHex    owner's eth_personal_sign over revealSignMessage(capsuleId)
  */
 export function decryptFromReveal(
   packed:         Uint8Array,
   timelockHeader: Uint8Array,
-  signatureHex:   string
 ): string {
   const { capsuleSeed, drandRound, nonce2, wrappedKey } = decodeHeader(timelockHeader);
 
-  const wrapKey = wrapKeyFromSignature(signatureHex, capsuleSeed, drandRound);
-  const dataKey  = aesDecrypt(wrappedKey, wrapKey, nonce2);
+  // Same derivation as encryptForSeal — wrapKey is deterministic from the header
+  const wrapKey = hkdf(sha256, capsuleSeed, u64BE(drandRound), utf8ToBytes("0g-time-capsule-v1"), 32);
+  const dataKey = aesDecrypt(wrappedKey, wrapKey, nonce2);
 
   const nonce1     = packed.slice(0, NONCE_LEN);
   const ciphertext = packed.slice(NONCE_LEN);
