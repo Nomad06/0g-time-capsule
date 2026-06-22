@@ -196,8 +196,8 @@ export async function decryptAsRecipient(
 }
 
 /**
- * Read-only reveal for already-revealed capsules (state === REVEALED).
- * Re-signs to decrypt locally without sending a tx.
+ * Read-only decrypt for already-revealed capsules (state === REVEALED).
+ * No tx or signature required.
  */
 export async function decryptRevealed(
   capsuleId: `0x${string}`

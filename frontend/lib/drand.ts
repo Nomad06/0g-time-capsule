@@ -41,16 +41,15 @@ export async function getOrCreateDrandClient(): Promise<HttpChainClient> {
   throw new Error(`All drand endpoints unreachable: ${lastErr}`);
 }
 
-/** @deprecated use getOrCreateDrandClient() */
+/** @deprecated use getOrCreateDrandClient() instead. */
 export function getDrandClient(): HttpChainClient {
-  // Return cached client synchronously if available; caller must await getOrCreateDrandClient() first.
   if (_client) return _client;
-  // Fallback: return first URL client without probe (original behaviour)
+  // Return unprobed fallback without caching — preserves failover for getOrCreateDrandClient()
   const chain = new HttpCachingChain(
     `${DRAND_URLS[0]}/${DRAND_QUICKNET_CHAIN}`,
     { disableBeaconVerification: false, noCache: false }
   );
-  return (_client = new HttpChainClient(chain));
+  return new HttpChainClient(chain);
 }
 
 /**

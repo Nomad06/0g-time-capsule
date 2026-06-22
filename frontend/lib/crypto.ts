@@ -1,18 +1,19 @@
 /**
  * Time Capsule hybrid encryption.
  *
- * Trust model (honest, no BLS dependency):
+ * Trust model:
  *   - Content is AES-256-GCM encrypted with a random dataKey.
- *   - dataKey is wrapped under a key derived from the owner's wallet signature.
- *   - The contract enforces the time lock — refuses reveal() before unlockTime.
- *   - On reveal, the owner signs a fixed message; client derives wrapKey, unwraps dataKey.
+ *   - dataKey is wrapped under wrapKey = HKDF(capsuleSeed, drandRound) — both stored
+ *     in timelockHeader on-chain. wrapKey is computable by anyone with the header.
+ *   - The contract enforces the time lock: seal(), reveal(), and access control gates
+ *     are enforced on-chain. Off-chain decryption is not gated by signature.
  *   - commitHash = keccak256(plaintext) stored on-chain proves content is tamper-proof.
  *
- * What this gives you:
- *   ✓ Content cannot be changed after seal (commitHash)
- *   ✓ No third party can decrypt (only owner-sig-derived key)
- *   ✓ Public reveal is enforced on-chain (contract rejects early reveal)
- *   ✓ Fully client-side; no server required
+ * Known limitations:
+ *   - No cryptographic confidentiality against observers who read timelockHeader from
+ *     getCapsule() before unlock time. Confidentiality relies on contract access control.
+ *   - drandRound is stored for future compatibility with drand TLE; the beacon randomness
+ *     is not currently mixed into the key derivation.
  *
  * timelockHeader layout (100 bytes, stored on-chain):
  *   [0..31]  capsuleSeed (32 bytes, random, public)
@@ -82,7 +83,6 @@ export function encryptForSeal(plaintext: string, drandRound: number): {
   packed:         Uint8Array;     // nonce1 ++ ciphertext → upload to 0G
   timelockHeader: Uint8Array;     // 100 bytes → seal() on-chain
   commitHash:     `0x${string}`; // keccak256(plaintext) → seal() on-chain
-  wrapKey:        Uint8Array;     // keep in memory; pass to buildRevealSignature() test helper
   dataKey:        Uint8Array;     // raw key — Stage 2: ECIES-wrap per recipient
 } {
   const dataKey     = randomBytes(32);
@@ -102,7 +102,6 @@ export function encryptForSeal(plaintext: string, drandRound: number): {
     packed,
     timelockHeader: encodeHeader({ capsuleSeed, drandRound, nonce2, wrappedKey }),
     commitHash: makeCommitHash(plaintext),
-    wrapKey,
     dataKey,
   };
 }
