@@ -89,10 +89,40 @@ export function ProofClient({ capsuleId }: Props) {
         </div>
       )}
 
-      {/* Countdown (shown while sealed) */}
-      {capsule && !alreadyRevealed && unlockDate && (
+      {/* Countdown — only for time-locked capsules; MULTISIG/DEADMAN have their own unlock condition */}
+      {capsule && !alreadyRevealed && unlockDate &&
+       capsule.triggerType === TriggerType.TIME && (
         <div className="my-8">
           <CountdownClock unlockDate={unlockDate} isUnlocked={unlocked} />
+        </div>
+      )}
+
+      {/* MULTISIG: show approval-pending hint instead of misleading countdown */}
+      {capsule && !alreadyRevealed && !unlocked &&
+       capsule.triggerType === TriggerType.MULTISIG && (
+        <div className="my-8 rounded-xl border border-indigo-900 bg-indigo-950/20 p-5 text-center">
+          <p className="text-indigo-300 font-semibold mb-1">Awaiting multi-sig approval</p>
+          <p className="text-muted-foreground text-sm">
+            Designated signers must approve on the{" "}
+            <a href={`/triggers/multisig/${capsuleId}`} className="text-indigo-400 underline">
+              Multi-Sig Reveal page
+            </a>{" "}
+            before this capsule can be revealed.
+          </p>
+        </div>
+      )}
+
+      {/* DEADMAN: show waiting hint when overdue but not yet triggered */}
+      {capsule && !alreadyRevealed && !unlocked &&
+       capsule.triggerType === TriggerType.DEADMAN && (
+        <div className="my-8 rounded-xl border border-orange-900 bg-orange-950/20 p-5 text-center">
+          <p className="text-orange-300 font-semibold mb-1">Waiting for Dead Man's Switch</p>
+          <p className="text-muted-foreground text-sm">
+            Owner must miss a check-in before this capsule unlocks.{" "}
+            <a href={`/triggers/deadman/${capsuleId}`} className="text-indigo-400 underline">
+              View switch status →
+            </a>
+          </p>
         </div>
       )}
 

@@ -21,17 +21,26 @@ export default function MultiSigPage({ params }: { params: Promise<{ id: string 
   const [canReveal,  setCanReveal]  = useState(false);
   const [loading,    setLoading]    = useState(false);
   const [status,     setStatus]     = useState("");
+  const [loadError,  setLoadError]  = useState("");
+  const [loaded,     setLoaded]     = useState(false);
 
   async function load() {
-    const v = await getVaultInfo(capsuleId);
-    setVault(v);
-    if (v && address) {
-      const [app, cr] = await Promise.all([
-        hasApproved(capsuleId, address as `0x${string}`),
-        multisigCanReveal(capsuleId),
-      ]);
-      setApproved(app);
-      setCanReveal(cr);
+    try {
+      const v = await getVaultInfo(capsuleId);
+      setVault(v);
+      setLoadError("");
+      setLoaded(true);
+      if (v && address) {
+        const [app, cr] = await Promise.all([
+          hasApproved(capsuleId, address as `0x${string}`),
+          multisigCanReveal(capsuleId),
+        ]);
+        setApproved(app);
+        setCanReveal(cr);
+      }
+    } catch (e: unknown) {
+      // Don't overwrite vault data on transient RPC errors
+      if (!loaded) setLoadError(e instanceof Error ? e.message : "Failed to load vault");
     }
   }
 
@@ -81,9 +90,16 @@ export default function MultiSigPage({ params }: { params: Promise<{ id: string 
 
       {!vault && (
         <div className="rounded-xl border border-border bg-card p-5 mb-2">
-          <p className="text-muted-foreground m-0">
-            No vault found for this capsule. Seal with Multi-sig trigger to create one.
-          </p>
+          {loadError ? (
+            <p className="text-red-400 m-0 text-sm">{loadError}</p>
+          ) : !loaded ? (
+            <p className="text-muted-foreground m-0">Loading vault…</p>
+          ) : (
+            <p className="text-muted-foreground m-0">
+              No vault found for this capsule. The multi-sig vault may not have been
+              created — try sealing a new capsule with the Multi-sig trigger.
+            </p>
+          )}
         </div>
       )}
 
