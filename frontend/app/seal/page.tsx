@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { TriggerType } from "@/lib/types";
 import { MediaRenderer, getMediaType } from "@/components/MediaRenderer";
 import { AiAssistant } from "@/components/AiAssistant";
+import { DurationPicker } from "@/components/DurationPicker";
 import { useSealForm } from "@/hooks/useSealForm";
 
 const TRIGGER_OPTS = [
@@ -51,6 +52,8 @@ export default function SealPage() {
     fileDataUri,
     fileName,
     minutesFromNow, setMinutesFromNow,
+    unlockMode,   setUnlockMode,
+    absoluteLocal, setAbsoluteLocal,
     trigger,      setTrigger,
     dmsInterval,  setDmsInterval,
     msSignersRaw, setMsSignersRaw,
@@ -206,17 +209,46 @@ export default function SealPage() {
 
       {/* Time lock config */}
       {trigger === TriggerType.TIME && (
-        <div className="mb-5 flex items-center gap-3">
-          <span className="text-sm text-muted-foreground">Unlock in</span>
-          <Input
-            type="number"
-            min={1}
-            value={minutesFromNow}
-            onChange={(e) => setMinutesFromNow(Number(e.target.value))}
-            disabled={loading}
-            className="w-24"
-          />
-          <span className="text-sm text-muted-foreground">minutes</span>
+        <div className="mb-5 rounded-lg border border-border bg-card p-4">
+          {/* Relative / absolute toggle */}
+          <div className="mb-4 flex gap-1 rounded-lg border border-border bg-background p-1">
+            <button
+              type="button"
+              onClick={() => setUnlockMode("relative")}
+              className={cn(
+                "flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                unlockMode === "relative" ? "bg-indigo-950/60 text-indigo-300" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Unlock in…
+            </button>
+            <button
+              type="button"
+              onClick={() => setUnlockMode("absolute")}
+              className={cn(
+                "flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                unlockMode === "absolute" ? "bg-indigo-950/60 text-indigo-300" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              On a date
+            </button>
+          </div>
+
+          {unlockMode === "relative" ? (
+            <DurationPicker minutes={minutesFromNow} onChange={setMinutesFromNow} disabled={loading} />
+          ) : (
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-muted-foreground">Unlocks on</span>
+              <Input
+                type="datetime-local"
+                min={localNowMin()}
+                value={absoluteLocal}
+                onChange={(e) => setAbsoluteLocal(e.target.value)}
+                disabled={loading}
+                className="w-auto"
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -235,13 +267,9 @@ export default function SealPage() {
           <p className="mb-3 text-xs text-muted-foreground">
             You must check in every {dmsInterval} day(s) or the capsule unlocks automatically.
           </p>
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-muted-foreground">Min lock window</span>
-            <Input type="number" min={1} value={minutesFromNow}
-              onChange={(e) => setMinutesFromNow(Number(e.target.value))}
-              disabled={loading} className="w-20"
-            />
-            <span className="text-xs text-muted-foreground">min</span>
+          <div>
+            <span className="mb-2 block text-xs text-muted-foreground">Min lock window</span>
+            <DurationPicker minutes={minutesFromNow} onChange={setMinutesFromNow} disabled={loading} hidePresets />
           </div>
         </div>
       )}
@@ -269,13 +297,9 @@ export default function SealPage() {
               of {msSignerCount} signer{msSignerCount !== 1 ? "s" : ""}
             </span>
           </div>
-          <div className="mt-3 flex items-center gap-3">
-            <span className="text-xs text-muted-foreground">Min lock window</span>
-            <Input type="number" min={1} value={minutesFromNow}
-              onChange={(e) => setMinutesFromNow(Number(e.target.value))}
-              disabled={loading} className="w-20"
-            />
-            <span className="text-xs text-muted-foreground">min</span>
+          <div className="mt-3">
+            <span className="mb-2 block text-xs text-muted-foreground">Min lock window</span>
+            <DurationPicker minutes={minutesFromNow} onChange={setMinutesFromNow} disabled={loading} hidePresets />
           </div>
         </div>
       )}
@@ -368,6 +392,13 @@ export default function SealPage() {
       )}
     </main>
   );
+}
+
+/** `datetime-local` min attr — current local time as YYYY-MM-DDTHH:mm. */
+function localNowMin(): string {
+  const now = new Date();
+  const off = now.getTimezoneOffset() * 60000;
+  return new Date(now.getTime() - off).toISOString().slice(0, 16);
 }
 
 function ResultField({ label, value }: { label: string; value: string }) {

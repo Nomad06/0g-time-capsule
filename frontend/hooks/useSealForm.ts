@@ -19,6 +19,8 @@ export interface SealFormState {
   fileName:      string;
   // trigger
   minutesFromNow: number;
+  unlockMode:     "relative" | "absolute";
+  absoluteLocal:  string;
   trigger:        TriggerType;
   dmsInterval:    number;
   msSignersRaw:   string;
@@ -40,6 +42,8 @@ export interface SealFormActions {
   setContentMode:   (v: "text" | "file") => void;
   setMessage:       (v: string) => void;
   setMinutesFromNow:(v: number) => void;
+  setUnlockMode:    (v: "relative" | "absolute") => void;
+  setAbsoluteLocal: (v: string) => void;
   setTrigger:       (v: TriggerType) => void;
   setDmsInterval:   (v: number) => void;
   setMsSignersRaw:  (v: string) => void;
@@ -70,7 +74,9 @@ export function useSealForm(): SealFormState & SealFormActions {
   const [fileName,    setFileName]    = useState("");
 
   // trigger
-  const [minutesFromNow, setMinutesFromNow] = useState(2);
+  const [minutesFromNow, setMinutesFromNow] = useState(1440); // default 1 day
+  const [unlockMode,     setUnlockMode]     = useState<"relative" | "absolute">("relative");
+  const [absoluteLocal,  setAbsoluteLocal]  = useState("");
   const [trigger,        setTrigger]        = useState<TriggerType>(TriggerType.TIME);
   const [dmsInterval,    setDmsInterval]    = useState(1);
   const [msSignersRaw,   setMsSignersRaw]   = useState("");
@@ -93,6 +99,7 @@ export function useSealForm(): SealFormState & SealFormActions {
     setContentMode("text");
     setMessage(tpl.message);
     setMinutesFromNow(tpl.minutesFromNow);
+    setUnlockMode("relative");
     setTrigger(TriggerType.TIME);
   }
 
@@ -125,7 +132,15 @@ export function useSealForm(): SealFormState & SealFormActions {
     setLoading(true); setResult(null);
 
     try {
-      const unlockTime = new Date(Date.now() + minutesFromNow * 60 * 1000);
+      // TIME trigger may use an absolute calendar date; others use the relative
+      // min-lock window. Absolute avoids drift between picking and sealing.
+      let unlockTime: Date;
+      if (trigger === TriggerType.TIME && unlockMode === "absolute") {
+        if (!absoluteLocal) { toast.error("Pick an unlock date"); setLoading(false); return; }
+        unlockTime = new Date(absoluteLocal);
+      } else {
+        unlockTime = new Date(Date.now() + minutesFromNow * 60 * 1000);
+      }
       const multisigSigners = parseAddrs(msSignersRaw);
 
       // Resolve recipient addresses → ECIES pubkeys from KeyRegistry before seal.
@@ -173,6 +188,8 @@ export function useSealForm(): SealFormState & SealFormActions {
     fileDataUri,
     fileName,
     minutesFromNow,
+    unlockMode,
+    absoluteLocal,
     trigger,
     dmsInterval,
     msSignersRaw,
@@ -189,6 +206,8 @@ export function useSealForm(): SealFormState & SealFormActions {
     setContentMode,
     setMessage,
     setMinutesFromNow,
+    setUnlockMode,
+    setAbsoluteLocal,
     setTrigger,
     setDmsInterval,
     setMsSignersRaw,
