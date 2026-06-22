@@ -25,14 +25,21 @@ export async function GET(req: NextRequest) {
     }
 
     const buf = readFileSync(tmpPath);
-    if (!buf.length) return NextResponse.json({ error: "Empty response" }, { status: 404 });
+    if (buf.length < 4) return NextResponse.json({ error: "Empty response" }, { status: 404 });
 
     const MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024;
     if (buf.length > MAX_DOWNLOAD_BYTES) {
       return NextResponse.json({ error: "Downloaded file exceeds 50 MB limit" }, { status: 413 });
     }
 
-    return NextResponse.json({ data: `0x${buf.toString("hex")}` });
+    // Strip the 4-byte length prefix + chunk padding written at upload time.
+    const len = buf.readUInt32BE(0);
+    if (len > buf.length - 4) {
+      return NextResponse.json({ error: "Corrupt length prefix (legacy/unframed blob?)" }, { status: 422 });
+    }
+    const payload = buf.subarray(4, 4 + len);
+
+    return NextResponse.json({ data: `0x${payload.toString("hex")}` });
   } finally {
     try { unlinkSync(tmpPath); } catch { /* already gone or never created */ }
   }

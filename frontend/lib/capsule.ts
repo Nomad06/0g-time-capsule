@@ -34,6 +34,7 @@ import {
   verifyOnChain,
   setRecipientKeys,
   getRecipientKey,
+  getEncryptionKey,
   getWalletClient,
 } from "./contract";
 import { armSwitch, createVault } from "./triggers";
@@ -61,6 +62,26 @@ async function _buildEncryption(
   const drandRound = await roundForTime(unlockTime);
   const { packed, timelockHeader, commitHash, dataKey } = await encryptForSeal(plaintext, drandRound, client);
   return { packed, timelockHeader, commitHash, dataKey, drandRound };
+}
+
+/**
+ * Resolve recipient wallet addresses → RecipientParam[] by fetching each one's
+ * registered ECIES public key from KeyRegistry. Throws if any recipient has not
+ * registered a key (they must visit /register first), otherwise their envelope
+ * could never be built and they'd be silently unable to decrypt.
+ */
+export async function resolveRecipients(
+  addresses: `0x${string}`[]
+): Promise<RecipientParam[]> {
+  const out: RecipientParam[] = [];
+  for (const address of addresses) {
+    const pubHex = await getEncryptionKey(address);
+    if (!pubHex || pubHex === "0x") {
+      throw new Error(`Recipient ${address} has not registered an encryption key (must visit /register)`);
+    }
+    out.push({ address, pubkey: hexToBytes(pubHex) });
+  }
+  return out;
 }
 
 async function _distributeRecipientKeys(

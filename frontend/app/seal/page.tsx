@@ -55,7 +55,9 @@ export default function SealPage() {
     dmsInterval,  setDmsInterval,
     msSignersRaw, setMsSignersRaw,
     msThreshold,  setMsThreshold,
+    recipientsRaw, setRecipientsRaw,
     msSignerCount,
+    recipientCount,
     result,
     status,
     loading,
@@ -277,6 +279,31 @@ export default function SealPage() {
           </div>
         </div>
       )}
+
+      {/* Recipients (optional, any trigger) */}
+      <div className="mb-5 rounded-lg border border-border bg-card p-4">
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Recipients <span className="font-normal normal-case opacity-60">· optional</span>
+        </p>
+        <p className="mb-3 text-xs text-muted-foreground/70">
+          Addresses that get a private decryption key. Leave empty for a public capsule
+          (anyone can decrypt after unlock). Each recipient must have registered an
+          encryption key at <code className="text-indigo-400">/register</code> first.
+        </p>
+        <Textarea
+          rows={2}
+          placeholder="0xAbc…, 0xDef…"
+          value={recipientsRaw}
+          onChange={(e) => setRecipientsRaw(e.target.value)}
+          disabled={loading}
+          className="font-mono text-xs"
+        />
+        {recipientCount > 0 && (
+          <p className="mt-2 text-xs text-indigo-400">
+            {recipientCount} recipient{recipientCount !== 1 ? "s" : ""} · keys resolved from KeyRegistry at seal
+          </p>
+        )}
+      </div>
 
       {/* Submit + animation */}
       <AnimatePresence mode="wait">

@@ -19,8 +19,14 @@ export async function POST(req: NextRequest) {
     if (!data) return NextResponse.json({ error: "Missing data" }, { status: 400 });
 
     const raw = Buffer.from(data.startsWith("0x") ? data.slice(2) : data, "hex");
+    // Prepend 4-byte big-endian length so download can strip chunk padding.
+    // Without this, payloads padded up to the 256-byte chunk minimum come back
+    // with trailing zeros, corrupting AES-GCM ciphertext ("invalid ghash tag").
+    const lenPrefix = Buffer.alloc(4);
+    lenPrefix.writeUInt32BE(raw.length, 0);
+    const framed = Buffer.concat([lenPrefix, raw]);
     // 0G storage minimum unit is 1 chunk = 256 bytes
-    const buf = raw.length < 256 ? Buffer.concat([raw, Buffer.alloc(256 - raw.length)]) : raw;
+    const buf = framed.length < 256 ? Buffer.concat([framed, Buffer.alloc(256 - framed.length)]) : framed;
 
     const provider = new JsonRpcProvider(RPC_URL);
     const wallet   = new Wallet(pk, provider);

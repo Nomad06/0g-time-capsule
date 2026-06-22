@@ -147,7 +147,9 @@ export function ProofClient({ capsuleId }: Props) {
       )}
 
       {/* Actions */}
-      {!result && capsule && (
+      {!result && capsule && (() => {
+        const isPublic = capsule.recipients.length === 0;
+        return (
         <div className="my-6">
           {!isConnected && !alreadyRevealed && (
             <p className="text-muted-foreground text-sm">Connect wallet to reveal (if you&apos;re the owner).</p>
@@ -162,6 +164,13 @@ export function ProofClient({ capsuleId }: Props) {
           {alreadyRevealed && isConnected && isOwner && (
             <Button onClick={handleDecrypt} disabled={loading} className="bg-green-900 hover:bg-green-800">
               {loading ? status : "Decrypt (sign to read)"}
+            </Button>
+          )}
+
+          {/* Public capsule (no recipients): tlock decrypt is read-only — anyone can read once revealed. No wallet/signature needed. */}
+          {alreadyRevealed && isPublic && !isOwner && (
+            <Button onClick={handleDecrypt} disabled={loading} className="bg-green-900 hover:bg-green-800">
+              {loading ? status : "Decrypt & read"}
             </Button>
           )}
 
@@ -184,13 +193,14 @@ export function ProofClient({ capsuleId }: Props) {
             </div>
           )}
 
-          {alreadyRevealed && !isConnected && (
+          {alreadyRevealed && !isConnected && !isPublic && (
             <p className="text-muted-foreground text-sm">
               Capsule revealed. Connect wallet to decrypt.
             </p>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {/* NFT mint */}
       {nftEnabled && isConnected && isOwner && !alreadyRevealed && (

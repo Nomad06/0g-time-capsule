@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { useAccount } from "wagmi";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { sealCapsule } from "@/lib/capsule";
+import { sealCapsule, resolveRecipients } from "@/lib/capsule";
 import { TriggerType } from "@/lib/types";
 import type { SealResult, TriggerConfig } from "@/lib/types";
 import { formatError } from "@/lib/utils";
@@ -23,8 +23,10 @@ export interface SealFormState {
   dmsInterval:    number;
   msSignersRaw:   string;
   msThreshold:    number;
+  recipientsRaw:  string;
   // derived
-  msSignerCount: number;
+  msSignerCount:    number;
+  recipientCount:   number;
   // async state
   result:  SealResult | null;
   status:  string;
@@ -42,6 +44,7 @@ export interface SealFormActions {
   setDmsInterval:   (v: number) => void;
   setMsSignersRaw:  (v: string) => void;
   setMsThreshold:   (v: number) => void;
+  setRecipientsRaw: (v: string) => void;
   applyTemplate:    (tpl: { message: string; minutesFromNow: number }) => void;
   handleFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   clearFile:        () => void;
@@ -72,15 +75,19 @@ export function useSealForm(): SealFormState & SealFormActions {
   const [dmsInterval,    setDmsInterval]    = useState(1);
   const [msSignersRaw,   setMsSignersRaw]   = useState("");
   const [msThreshold,    setMsThreshold]    = useState(2);
+  const [recipientsRaw,  setRecipientsRaw]  = useState("");
 
   const [result,  setResult]  = useState<SealResult | null>(null);
   const [status,  setStatus]  = useState("");
   const [loading, setLoading] = useState(false);
   const [sealed,  setSealed]  = useState(false);
 
-  const msSignerCount = msSignersRaw
-    .split(/[\s,]+/)
-    .filter(s => s.startsWith("0x") && s.length === 42).length;
+  const parseAddrs = (raw: string) =>
+    raw.split(/[\s,]+/).map(s => s.trim())
+      .filter(s => s.startsWith("0x") && s.length === 42) as `0x${string}`[];
+
+  const msSignerCount  = parseAddrs(msSignersRaw).length;
+  const recipientCount = parseAddrs(recipientsRaw).length;
 
   function applyTemplate(tpl: { message: string; minutesFromNow: number }) {
     setContentMode("text");
@@ -119,10 +126,16 @@ export function useSealForm(): SealFormState & SealFormActions {
 
     try {
       const unlockTime = new Date(Date.now() + minutesFromNow * 60 * 1000);
-      const multisigSigners = msSignersRaw
-        .split(/[\s,]+/)
-        .map(s => s.trim())
-        .filter(s => s.startsWith("0x") && s.length === 42) as `0x${string}`[];
+      const multisigSigners = parseAddrs(msSignersRaw);
+
+      // Resolve recipient addresses → ECIES pubkeys from KeyRegistry before seal.
+      // Throws early (clear message) if any recipient hasn't registered a key.
+      const recipientAddrs = parseAddrs(recipientsRaw);
+      let recipients: Awaited<ReturnType<typeof resolveRecipients>> = [];
+      if (recipientAddrs.length > 0) {
+        setStatus("Resolving recipient keys from KeyRegistry…");
+        recipients = await resolveRecipients(recipientAddrs);
+      }
 
       setStatus(
         trigger === TriggerType.DEADMAN  ? "Sealing + arming dead man's switch…" :
@@ -140,7 +153,7 @@ export function useSealForm(): SealFormState & SealFormActions {
       const res = await sealCapsule({
         plaintext,
         unlockTime,
-        recipients: [],
+        recipients,
         trigger: triggerCfg,
       });
 
@@ -164,7 +177,9 @@ export function useSealForm(): SealFormState & SealFormActions {
     dmsInterval,
     msSignersRaw,
     msThreshold,
+    recipientsRaw,
     msSignerCount,
+    recipientCount,
     result,
     status,
     loading,
@@ -178,6 +193,7 @@ export function useSealForm(): SealFormState & SealFormActions {
     setDmsInterval,
     setMsSignersRaw,
     setMsThreshold,
+    setRecipientsRaw,
     applyTemplate,
     handleFileChange,
     clearFile,
