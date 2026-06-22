@@ -18,7 +18,6 @@
 import {
   encryptForSeal,
   decryptFromReveal,
-  revealSignMessage,
   makeCommitHash,
   hexToBytes,
   bytesToHex,
@@ -40,7 +39,7 @@ import {
 import { armSwitch, createVault } from "./triggers";
 import { roundForTime } from "./drand";
 import { TriggerType } from "./types";
-import type { SealParams, SealResult, RevealResult, SignerLike, TriggerConfig, RecipientParam } from "./types";
+import type { SealParams, SealResult, RevealResult, TriggerConfig, RecipientParam } from "./types";
 
 // ── Private stage helpers ─────────────────────────────────────────────────────
 
@@ -91,16 +90,13 @@ async function _setupTrigger(
 // ── Private decrypt helper ────────────────────────────────────────────────────
 
 async function _decryptOwnerCapsule(
-  capsuleId:     `0x${string}`,
+  capsuleId:      `0x${string}`,
   timelockHeader: Uint8Array,
-  packed:        Uint8Array,
-  signer:        SignerLike
+  packed:         Uint8Array
 ): Promise<{ plaintext: string; commitHash: `0x${string}`; verified: boolean }> {
-  const message      = revealSignMessage(capsuleId);
-  const signatureHex = await signer.signMessage(message);
-  const plaintext    = decryptFromReveal(packed, timelockHeader, signatureHex);
-  const hash         = makeCommitHash(plaintext);
-  const verified     = await verifyOnChain(capsuleId, hash);
+  const plaintext = decryptFromReveal(packed, timelockHeader);
+  const hash      = makeCommitHash(plaintext);
+  const verified  = await verifyOnChain(capsuleId, hash);
   return { plaintext, commitHash: hash, verified };
 }
 
@@ -148,20 +144,16 @@ export async function sealCapsule(params: SealParams): Promise<SealResult> {
 // ── Reveal ────────────────────────────────────────────────────────────────────
 
 export async function revealCapsule(
-  capsuleId: `0x${string}`,
-  signer:    SignerLike
+  capsuleId: `0x${string}`
 ): Promise<RevealResult> {
-  // 1. Trigger on-chain reveal (fails if still locked)
   const { timelockHeader: headerHex } = await revealOnChain(capsuleId);
   const timelockHeader = Buffer.from(headerHex.slice(2), "hex");
 
-  // 2. Need storageRoot to fetch from 0G
   const cap    = await getCapsule(capsuleId);
   const packed = await downloadFromStorage(cap.storageRoot);
 
-  // 3. Owner signs to authorize local decryption
   const { plaintext, commitHash, verified } =
-    await _decryptOwnerCapsule(capsuleId, timelockHeader, packed, signer);
+    await _decryptOwnerCapsule(capsuleId, timelockHeader, packed);
 
   return { capsuleId, plaintext, commitHash, verified };
 }
@@ -208,8 +200,7 @@ export async function decryptAsRecipient(
  * Re-signs to decrypt locally without sending a tx.
  */
 export async function decryptRevealed(
-  capsuleId: `0x${string}`,
-  signer:    SignerLike
+  capsuleId: `0x${string}`
 ): Promise<RevealResult> {
   const cap = await getCapsule(capsuleId);
   if (cap.state !== 1) throw new Error("Capsule not yet revealed on-chain");
@@ -218,7 +209,7 @@ export async function decryptRevealed(
   const packed         = await downloadFromStorage(cap.storageRoot);
 
   const { plaintext, commitHash, verified } =
-    await _decryptOwnerCapsule(capsuleId, timelockHeader, packed, signer);
+    await _decryptOwnerCapsule(capsuleId, timelockHeader, packed);
 
   return { capsuleId, plaintext, commitHash, verified };
 }

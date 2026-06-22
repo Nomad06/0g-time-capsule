@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { use } from "react";
 import { useAccount } from "wagmi";
-import { BrowserProvider } from "ethers";
 import { LockOpen, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -40,17 +39,11 @@ export default function RevealPage({ params }: Props) {
     return () => { cancel = true; clearInterval(t); };
   }, [capsuleId]);
 
-  async function getSigner() {
-    if (!window.ethereum) throw new Error("No wallet detected");
-    return new BrowserProvider(window.ethereum).getSigner();
-  }
-
   async function handleReveal() {
     setLoading(true); setStatus("Sending reveal tx…");
     try {
-      const signer = await getSigner();
       setStatus("Sign to decrypt…");
-      setResult(await revealCapsule(capsuleId, signer));
+      setResult(await revealCapsule(capsuleId));
     } catch (e: unknown) {
       toast.error("Reveal failed", { description: e instanceof Error ? e.message : String(e) });
     } finally { setLoading(false); setStatus(""); }
@@ -59,8 +52,7 @@ export default function RevealPage({ params }: Props) {
   async function handleDecryptAlreadyRevealed() {
     setLoading(true); setStatus("Sign to decrypt…");
     try {
-      const signer = await getSigner();
-      setResult(await decryptRevealed(capsuleId, signer));
+      setResult(await decryptRevealed(capsuleId));
     } catch (e: unknown) {
       toast.error("Decryption failed", { description: e instanceof Error ? e.message : String(e) });
     } finally { setLoading(false); setStatus(""); }

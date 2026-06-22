@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useAccount, useWalletClient } from "wagmi";
+import { useAccount } from "wagmi";
 import { getCapsule, isUnlocked } from "@/lib/contract";
 import { revealCapsule, decryptRevealed, decryptAsRecipient } from "@/lib/capsule";
 import { loadPrivKeyFromStorage, hasSavedPrivKey } from "@/lib/ecies";
@@ -43,7 +43,6 @@ export interface ProofFlowActions {
 
 export function useProofFlow(capsuleId: `0x${string}`): ProofFlowState & ProofFlowActions {
   const { isConnected, address } = useAccount();
-  const { data: walletClient } = useWalletClient();
 
   const [capsule,    setCapsule]    = useState<OnChainCapsule | null>(null);
   const [unlocked,   setUnlocked]   = useState(false);
@@ -84,23 +83,19 @@ export function useProofFlow(capsuleId: `0x${string}`): ProofFlowState & ProofFl
   }
 
   async function handleReveal() {
-    if (!walletClient) { setError("Wallet not connected"); return; }
     setLoading(true); setError(""); setStatus("Sending reveal tx…");
     try {
-      const signer = { signMessage: (message: string) => walletClient.signMessage({ message }) };
       setStatus("Sign to decrypt…");
-      setResult(await revealCapsule(capsuleId, signer));
+      setResult(await revealCapsule(capsuleId));
     } catch (e: unknown) {
       setError(formatError(e));
     } finally { setLoading(false); }
   }
 
   async function handleDecrypt() {
-    if (!walletClient) { setError("Wallet not connected"); return; }
     setLoading(true); setError(""); setStatus("Sign to decrypt…");
     try {
-      const signer = { signMessage: (message: string) => walletClient.signMessage({ message }) };
-      setResult(await decryptRevealed(capsuleId, signer));
+      setResult(await decryptRevealed(capsuleId));
     } catch (e: unknown) {
       setError(formatError(e));
     } finally { setLoading(false); }

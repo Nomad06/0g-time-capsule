@@ -37,22 +37,16 @@ export interface RecipientParam {
 
 // ── Trigger configs (discriminated union) ─────────────────────────────────────
 
-/** Minimal signer interface — compatible with wagmi/viem account objects. */
-export interface SignerLike {
-  signMessage(message: string): Promise<string>;
-}
-
 export type TriggerConfig =
   | { type: typeof TriggerType.TIME }
   | { type: typeof TriggerType.DEADMAN;  intervalDays: number }
   | { type: typeof TriggerType.MULTISIG; signers: `0x${string}`[]; threshold: number };
 
 export interface SealParams {
-  plaintext:        string;            // UTF-8 message
-  unlockTime:       Date;              // JS Date → unix timestamp on-chain
-  signer?:          SignerLike;        // only used by reveal/decrypt flows; not needed for seal
-  recipients?:      RecipientParam[];  // empty = public; Stage 2: each gets ECIES key
-  trigger?:         TriggerConfig;     // undefined = TIME trigger
+  plaintext:        string;
+  unlockTime:       Date;
+  recipients?:      RecipientParam[];
+  trigger?:         TriggerConfig;
   triggerContract?: `0x${string}`;
 }
 
