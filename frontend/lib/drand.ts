@@ -19,14 +19,38 @@ const DRAND_URLS = [
 
 let _client: HttpChainClient | null = null;
 
-export function getDrandClient(): HttpChainClient {
+export async function getOrCreateDrandClient(): Promise<HttpChainClient> {
   if (_client) return _client;
+
+  let lastErr: unknown;
+  for (const url of DRAND_URLS) {
+    try {
+      const chain = new HttpCachingChain(
+        `${url}/${DRAND_QUICKNET_CHAIN}`,
+        { disableBeaconVerification: false, noCache: false }
+      );
+      const candidate = new HttpChainClient(chain);
+      // probe — throws if unreachable
+      await candidate.chain().info();
+      _client = candidate;
+      return _client;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw new Error(`All drand endpoints unreachable: ${lastErr}`);
+}
+
+/** @deprecated use getOrCreateDrandClient() */
+export function getDrandClient(): HttpChainClient {
+  // Return cached client synchronously if available; caller must await getOrCreateDrandClient() first.
+  if (_client) return _client;
+  // Fallback: return first URL client without probe (original behaviour)
   const chain = new HttpCachingChain(
     `${DRAND_URLS[0]}/${DRAND_QUICKNET_CHAIN}`,
     { disableBeaconVerification: false, noCache: false }
   );
-  _client = new HttpChainClient(chain);
-  return _client;
+  return (_client = new HttpChainClient(chain));
 }
 
 /**
@@ -34,7 +58,7 @@ export function getDrandClient(): HttpChainClient {
  * This is the round used to timelock-encrypt the capsule key.
  */
 export async function roundForTime(unlockTime: Date): Promise<number> {
-  const client = getDrandClient();
+  const client = await getOrCreateDrandClient();
   const info = await client.chain().info();
   return roundAt(unlockTime.getTime(), info);
 }
@@ -43,7 +67,7 @@ export async function roundForTime(unlockTime: Date): Promise<number> {
  * Timestamp (ms) when a specific drand round will be published.
  */
 export async function timeForRound(round: number): Promise<Date> {
-  const client = getDrandClient();
+  const client = await getOrCreateDrandClient();
   const info = await client.chain().info();
   return new Date(roundTime(info, round));
 }
@@ -53,7 +77,7 @@ export async function timeForRound(round: number): Promise<Date> {
  * Will reject if the round hasn't been published yet.
  */
 export async function fetchRound(round: number) {
-  const client = getDrandClient();
+  const client = await getOrCreateDrandClient();
   return client.get(round);
 }
 

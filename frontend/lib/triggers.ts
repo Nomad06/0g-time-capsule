@@ -178,12 +178,15 @@ export async function hasApproved(
   });
 }
 
-export async function multisigCanReveal(capsuleId: `0x${string}`): Promise<boolean> {
+export async function multisigCanReveal(
+  capsuleId: `0x${string}`,
+  caller?:   `0x${string}`,
+): Promise<boolean> {
   const pub = getPublicClient();
   return pub.readContract({
     address:      CONTRACT_ADDRESSES.MultiSigReveal,
     abi:          MULTI_SIG_REVEAL_ABI,
     functionName: "canReveal",
-    args:         [capsuleId, "0x0000000000000000000000000000000000000000"],
+    args:         [capsuleId, caller ?? "0x0000000000000000000000000000000000000000"],
   });
 }
