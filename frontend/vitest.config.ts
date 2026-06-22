@@ -4,7 +4,7 @@ import path from "path";
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["lib/__tests__/**/*.test.ts"],
+    include: ["{lib,hooks}/__tests__/**/*.test.ts"],
     coverage: {
       provider: "v8",
       include: ["lib/**/*.ts"],

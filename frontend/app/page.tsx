@@ -5,7 +5,7 @@ import { CardsAnimated } from "./_landing/CardsAnimated";
 const STEPS = [
   { title: "Seal",        desc: "Write your message. It's encrypted client-side with AES-256-GCM. The keccak256 commitment is stored on 0G Chain; ciphertext on 0G Storage.", code: "TimeCapsule.seal(storageRoot, commitHash, timelockHeader, unlockTime, …)" },
   { title: "Wait",        desc: "The contract enforces the unlock condition — time, dead man's switch, or multi-sig. No one can decrypt early, not even you.",                  code: "require(block.timestamp >= unlockTime || triggerContract.canReveal(…))" },
-  { title: "Reveal + Prove", desc: "Anyone calls reveal(). The contract emits the timelock header. The revealed plaintext is verified against the on-chain commitment.",      code: "verify(capsuleId, keccak256(plaintext)) → true" },
+  { title: "Reveal + Prove", desc: "After unlock, the owner and named recipients decrypt with their own key — no one else can. The plaintext is verified against the on-chain commitment.", code: "verify(capsuleId, keccak256(plaintext)) → true" },
 ];
 
 const STACK = [
