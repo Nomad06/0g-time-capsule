@@ -33,8 +33,13 @@ export async function downloadFromStorage(rootHash: `0x${string}`): Promise<Uint
   const res = await fetch(`/api/storage/download?hash=${encodeURIComponent(rootHash)}`);
 
   if (!res.ok) {
-    const { error } = await res.json();
-    throw new Error(`Storage download failed: ${error}`);
+    let message = `HTTP ${res.status}`;
+    try {
+      const text = await res.text();
+      try { message = (JSON.parse(text) as { error?: string }).error ?? text; }
+      catch { message = text || message; }
+    } catch { /* network error — keep default */ }
+    throw new Error(`Storage download failed: ${message}`);
   }
 
   const { data }: { data: string } = await res.json();

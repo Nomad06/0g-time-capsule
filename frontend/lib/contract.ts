@@ -18,11 +18,15 @@ import type { OnChainCapsule, TriggerType } from "./types";
 
 // ── Clients ───────────────────────────────────────────────────────────────────
 
+let _publicClient: PublicClient | null = null;
+
 export function getPublicClient(): PublicClient {
-  return createPublicClient({
+  if (_publicClient) return _publicClient;
+  _publicClient = createPublicClient({
     chain: zeroGTestnet,
     transport: http(),
   });
+  return _publicClient;
 }
 
 export async function getWalletClient(): Promise<WalletClient & { account: NonNullable<WalletClient["account"]> }> {
