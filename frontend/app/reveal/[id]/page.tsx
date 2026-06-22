@@ -2,12 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { useAccount } from "wagmi";
+import Link from "next/link";
 import { LockOpen, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ConnectButton } from "@/components/ConnectButton";
 import { getCapsule, isUnlocked } from "@/lib/contract";
-import { revealCapsule, decryptRevealed } from "@/lib/capsule";
+import { revealCapsule, decryptAsRecipient } from "@/lib/capsule";
+import { loadPrivKeyFromStorage } from "@/lib/ecies";
 import type { OnChainCapsule, RevealResult } from "@/lib/types";
 import { CapsuleState } from "@/lib/types";
 
@@ -16,7 +18,7 @@ interface Props { params: { id: string }; }
 export default function RevealPage({ params }: Props) {
   const { id } = params;
   const capsuleId = id as `0x${string}`;
-  const { isConnected } = useAccount();
+  const { address, isConnected } = useAccount();
 
   const [capsule,  setCapsule]  = useState<OnChainCapsule | null>(null);
   const [unlocked, setUnlocked] = useState(false);
@@ -39,10 +41,22 @@ export default function RevealPage({ params }: Props) {
     return () => { cancel = true; clearInterval(t); };
   }, [capsuleId]);
 
+  // Private capsules can only be decrypted with the wallet's local ECIES key.
+  function requireKey(): Uint8Array {
+    if (!address) throw new Error("Connect your wallet first");
+    const privKey = loadPrivKeyFromStorage(address);
+    if (!privKey) {
+      throw new Error("No encryption key on this device — register or import it at /register, then retry.");
+    }
+    return privKey;
+  }
+
   async function handleReveal() {
     setLoading(true); setStatus("Sending reveal tx…");
     try {
-      setResult(await revealCapsule(capsuleId));
+      const privKey = requireKey();
+      setStatus("Revealing + decrypting…");
+      setResult(await revealCapsule(capsuleId, address!, privKey));
     } catch (e: unknown) {
       toast.error("Reveal failed", { description: e instanceof Error ? e.message : String(e) });
     } finally { setLoading(false); setStatus(""); }
@@ -51,7 +65,8 @@ export default function RevealPage({ params }: Props) {
   async function handleDecryptAlreadyRevealed() {
     setLoading(true); setStatus("Decrypting…");
     try {
-      setResult(await decryptRevealed(capsuleId));
+      const privKey = requireKey();
+      setResult(await decryptAsRecipient(capsuleId, address!, privKey));
     } catch (e: unknown) {
       toast.error("Decryption failed", { description: e instanceof Error ? e.message : String(e) });
     } finally { setLoading(false); setStatus(""); }
@@ -59,6 +74,7 @@ export default function RevealPage({ params }: Props) {
 
   const unlockDate      = capsule ? new Date(Number(capsule.unlockTime) * 1000) : null;
   const alreadyRevealed = capsule?.state === CapsuleState.REVEALED;
+  const hasLocalKey     = !!address && !!loadPrivKeyFromStorage(address);
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-12 sm:px-6">
@@ -76,13 +92,20 @@ export default function RevealPage({ params }: Props) {
 
       {!isConnected && <div className="mb-5"><ConnectButton /></div>}
 
+      {isConnected && !hasLocalKey && (
+        <div className="mb-5 rounded-lg border border-amber-800 bg-amber-950/20 p-4 text-sm text-amber-300">
+          This capsule is private. Decryption needs your encryption key on this device.{" "}
+          <Link href="/register" className="underline hover:text-amber-200">Register or import your key →</Link>
+        </div>
+      )}
+
       {!result && (
         <div className="flex flex-wrap gap-3">
           {!alreadyRevealed && (
             <Button
               onClick={handleReveal}
-              disabled={loading || !unlocked || !isConnected}
-              variant={unlocked && isConnected ? "default" : "secondary"}
+              disabled={loading || !unlocked || !isConnected || !hasLocalKey}
+              variant={unlocked && isConnected && hasLocalKey ? "default" : "secondary"}
             >
               {loading ? (
                 <span className="flex items-center gap-2">
@@ -90,14 +113,15 @@ export default function RevealPage({ params }: Props) {
                   {status}
                 </span>
               ) : !isConnected ? "Connect wallet" :
+                !hasLocalKey ? "Encryption key required" :
                 !unlocked ? `Locked until ${unlockDate?.toLocaleString() ?? "…"}` :
                 "Reveal & Decrypt"}
             </Button>
           )}
           {alreadyRevealed && isConnected && (
-            <Button onClick={handleDecryptAlreadyRevealed} disabled={loading}
+            <Button onClick={handleDecryptAlreadyRevealed} disabled={loading || !hasLocalKey}
               className="bg-green-800 hover:bg-green-700">
-              {loading ? status : "Decrypt (sign to read)"}
+              {loading ? status : "Decrypt"}
             </Button>
           )}
         </div>

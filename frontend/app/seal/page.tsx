@@ -310,9 +310,11 @@ export default function SealPage() {
           Recipients <span className="font-normal normal-case opacity-60">· optional</span>
         </p>
         <p className="mb-3 text-xs text-muted-foreground/70">
-          Addresses that get a private decryption key. Leave empty for a public capsule
-          (anyone can decrypt after unlock). Each recipient must have registered an
-          encryption key at <code className="text-indigo-400">/register</code> first.
+          Extra addresses that may decrypt after unlock. You (the owner) can always
+          decrypt — leave empty for an owner-only capsule. Capsules are private: only
+          the owner and listed recipients can ever read them. You and each recipient
+          must have registered an encryption key at{" "}
+          <code className="text-indigo-400">/register</code> first.
         </p>
         <Textarea
           rows={2}

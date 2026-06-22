@@ -35,7 +35,6 @@ export function ProofClient({ capsuleId }: Props) {
     poll,
     handleReveal,
     handleDecrypt,
-    handleRecipientDecrypt,
     handleMintNFT,
     copyLink,
   } = useProofFlow(capsuleId);
@@ -146,57 +145,50 @@ export function ProofClient({ capsuleId }: Props) {
         </div>
       )}
 
-      {/* Actions */}
+      {/* Actions — every capsule is private; only owner + recipients can decrypt,
+          and only with their local ECIES key. */}
       {!result && capsule && (() => {
-        const isPublic = capsule.recipients.length === 0;
+        const canAccess  = isOwner || isRecipient;
+        const keyNotice  = (
+          <p className="text-amber-400 text-xs mt-1.5">
+            Decryption needs your encryption key on this device.{" "}
+            <a href="/register" className="text-indigo-300">Register or import your key →</a>
+          </p>
+        );
         return (
         <div className="my-6">
-          {!isConnected && !alreadyRevealed && (
-            <p className="text-muted-foreground text-sm">Connect wallet to reveal (if you&apos;re the owner).</p>
+          {!isConnected && (
+            <p className="text-muted-foreground text-sm">
+              Connect your wallet to {alreadyRevealed ? "decrypt" : "reveal"} — owner and recipients only.
+            </p>
           )}
 
-          {isConnected && unlocked && !alreadyRevealed && (
-            <Button onClick={handleReveal} disabled={loading}>
-              {loading ? status : "Reveal & Decrypt"}
-            </Button>
+          {isConnected && !canAccess && (
+            <p className="text-muted-foreground text-sm">
+              This capsule is private. Only the owner and named recipients can decrypt it.
+            </p>
           )}
 
-          {alreadyRevealed && isConnected && isOwner && (
-            <Button onClick={handleDecrypt} disabled={loading} className="bg-green-900 hover:bg-green-800">
-              {loading ? status : "Decrypt (sign to read)"}
-            </Button>
-          )}
-
-          {/* Public capsule (no recipients): tlock decrypt is read-only — anyone can read once revealed. No wallet/signature needed. */}
-          {alreadyRevealed && isPublic && !isOwner && (
-            <Button onClick={handleDecrypt} disabled={loading} className="bg-green-900 hover:bg-green-800">
-              {loading ? status : "Decrypt & read"}
-            </Button>
-          )}
-
-          {/* Stage 2: recipient decrypt — no signing needed, uses local ECIES key */}
-          {alreadyRevealed && isConnected && isRecipient && !isOwner && (
+          {isConnected && canAccess && unlocked && !alreadyRevealed && (
             <div>
-              <Button
-                onClick={handleRecipientDecrypt}
-                disabled={loading || !hasLocalKey}
-                className={hasLocalKey ? "bg-blue-700 hover:bg-blue-600" : "bg-muted text-muted-foreground"}
-              >
-                {loading ? status : "Decrypt as recipient"}
+              <Button onClick={handleReveal} disabled={loading || !hasLocalKey}>
+                {loading ? status : "Reveal & Decrypt"}
               </Button>
-              {!hasLocalKey && (
-                <p className="text-amber-400 text-xs mt-1.5">
-                  No local encryption key found.{" "}
-                  <a href="/register" className="text-indigo-300">Register or import your key →</a>
-                </p>
-              )}
+              {!hasLocalKey && keyNotice}
             </div>
           )}
 
-          {alreadyRevealed && !isConnected && !isPublic && (
-            <p className="text-muted-foreground text-sm">
-              Capsule revealed. Connect wallet to decrypt.
-            </p>
+          {isConnected && canAccess && alreadyRevealed && (
+            <div>
+              <Button
+                onClick={handleDecrypt}
+                disabled={loading || !hasLocalKey}
+                className={hasLocalKey ? "bg-green-900 hover:bg-green-800" : "bg-muted text-muted-foreground"}
+              >
+                {loading ? status : "Decrypt"}
+              </Button>
+              {!hasLocalKey && keyNotice}
+            </div>
           )}
         </div>
         );

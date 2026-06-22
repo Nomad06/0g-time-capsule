@@ -1,16 +1,24 @@
 /**
  * Orchestrates the full seal → store → reveal → decrypt lifecycle.
  *
+ * Confidentiality model — PRIVATE, time-gated:
+ *   The dataKey is recoverable only by combining (a) a recipient's ECIES private
+ *   key with (b) the drand beacon for the unlock round. Neither alone suffices.
+ *   The tlock-encrypted key blob is NEVER published in the clear on-chain — it is
+ *   ECIES-wrapped per recipient (owner is always a recipient). A non-recipient
+ *   wallet, the server, and the public chain see only opaque ciphertext.
+ *
  * Seal flow:
  *   1. Compute drand round for unlock time
- *   2. AES-encrypt plaintext; wrap dataKey under signature-derived wrapKey
+ *   2. AES-encrypt plaintext under a random dataKey; tlock-encrypt dataKey → keyBlob
  *   3. Upload ciphertext → 0G Storage
- *   4. Call TimeCapsule.seal() on-chain → get capsuleId
+ *   4. Call TimeCapsule.seal() on-chain with an EMPTY timelockHeader (no public key)
+ *   5. ECIES-wrap keyBlob for owner + each recipient → setRecipientKeys()
  *
- * Reveal flow:
- *   1. Check capsule is unlocked (contract read)
- *   2. Call TimeCapsule.reveal() on-chain → emits timelockHeader
- *   3. Owner signs revealSignMessage(capsuleId) → wrapKey → dataKey
+ * Decrypt flow (owner or recipient):
+ *   1. Fetch this wallet's ECIES envelope via getRecipientKey()
+ *   2. ECIES-decrypt with the wallet's local private key → keyBlob
+ *   3. timelock-decrypt keyBlob (fails until the drand round is published) → dataKey
  *   4. Fetch ciphertext from 0G → AES-decrypt → plaintext
  *   5. Verify commitHash on-chain
  */
@@ -21,10 +29,7 @@ import {
   makeCommitHash,
   hexToBytes,
   bytesToHex,
-  NONCE_LEN,
 } from "./crypto";
-import { gcm } from "@noble/ciphers/aes";
-import { bytesToUtf8 } from "@noble/ciphers/utils";
 import { eciesEncrypt, eciesDecrypt } from "./ecies";
 import { uploadToStorage, downloadFromStorage } from "./storage";
 import {
@@ -84,15 +89,69 @@ export async function resolveRecipients(
   return out;
 }
 
+/**
+ * ECIES-wrap the tlock key blob (NOT the bare dataKey) for each recipient and
+ * deposit the envelopes on-chain. Wrapping the time-locked blob — rather than the
+ * dataKey itself — is what binds decryption to BOTH the recipient's private key
+ * and the drand round: an envelope yields only the blob, which is still useless
+ * until the beacon publishes.
+ */
 async function _distributeRecipientKeys(
   capsuleId:  `0x${string}`,
   recipients: RecipientParam[],
-  dataKey:    Uint8Array
+  keyBlob:    Uint8Array
 ): Promise<void> {
   if (recipients.length === 0) return;
   const recipientAddresses = recipients.map(r => r.address);
-  const encryptedKeys      = recipients.map(r => bytesToHex(eciesEncrypt(r.pubkey, dataKey)));
+  const encryptedKeys      = recipients.map(r => bytesToHex(eciesEncrypt(r.pubkey, keyBlob)));
   await setRecipientKeys(capsuleId, recipientAddresses, encryptedKeys);
+}
+
+/** Dedupe RecipientParams by address (case-insensitive), keeping first occurrence. */
+function _dedupeRecipients(recipients: RecipientParam[]): RecipientParam[] {
+  const seen = new Set<string>();
+  const out: RecipientParam[] = [];
+  for (const r of recipients) {
+    const k = r.address.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(r);
+  }
+  return out;
+}
+
+/**
+ * Recover the tlock key blob for `address` by ECIES-decrypting its on-chain
+ * envelope with the wallet's local private key. Throws if no envelope exists
+ * (caller is not a provisioned recipient/owner of this capsule).
+ */
+async function _recoverKeyBlob(
+  capsuleId: `0x${string}`,
+  address:   `0x${string}`,
+  privKey:   Uint8Array
+): Promise<Uint8Array> {
+  const envelopeHex = await getRecipientKey(capsuleId, address);
+  if (!envelopeHex || envelopeHex === "0x") {
+    throw new Error("This capsule is private — your address has no decryption key on it (not a recipient).");
+  }
+  return eciesDecrypt(privKey, hexToBytes(envelopeHex));
+}
+
+/**
+ * Given a recovered key blob, fetch the ciphertext and decrypt. The timelock
+ * decrypt inside decryptFromReveal fails until the drand round is published,
+ * which enforces the time gate even for a valid recipient.
+ */
+async function _decryptWithKeyBlob(
+  capsuleId: `0x${string}`,
+  keyBlob:   Uint8Array
+): Promise<RevealResult> {
+  const cap       = await getCapsule(capsuleId);
+  const packed    = await downloadFromStorage(cap.storageRoot);
+  const plaintext = await decryptFromReveal(packed, keyBlob);
+  const hash      = makeCommitHash(plaintext);
+  const verified  = await verifyOnChain(capsuleId, hash);
+  return { capsuleId, plaintext, commitHash: hash, verified };
 }
 
 /**
@@ -133,19 +192,6 @@ async function _setupTrigger(
   }
 }
 
-// ── Private decrypt helper ────────────────────────────────────────────────────
-
-async function _decryptOwnerCapsule(
-  capsuleId:      `0x${string}`,
-  timelockHeader: Uint8Array,
-  packed:         Uint8Array
-): Promise<{ plaintext: string; commitHash: `0x${string}`; verified: boolean }> {
-  const plaintext = await decryptFromReveal(packed, timelockHeader);
-  const hash      = makeCommitHash(plaintext);
-  const verified  = await verifyOnChain(capsuleId, hash);
-  return { plaintext, commitHash: hash, verified };
-}
-
 // ── Seal ──────────────────────────────────────────────────────────────────────
 
 export async function sealCapsule(params: SealParams): Promise<SealResult> {
@@ -155,14 +201,29 @@ export async function sealCapsule(params: SealParams): Promise<SealResult> {
   if (unlockTime <= new Date()) throw new Error("Unlock time must be in the future");
   if (trigger && trigger.type !== TriggerType.TIME) _validateTrigger(trigger);
 
-  // 1 + 2. Compute drand round + encrypt
-  const { packed, timelockHeader, commitHash, dataKey, drandRound } =
+  // 1 + 2. Compute drand round + encrypt. `timelockHeader` is the tlock key blob;
+  // it stays off-chain (ECIES-wrapped per recipient) so the public never sees it.
+  const { packed, timelockHeader: keyBlob, commitHash, drandRound } =
     await _buildEncryption(plaintext, unlockTime);
+
+  // The owner is always a recipient — they must have a registered ECIES key so we
+  // can wrap the blob for them, otherwise they could never read their own capsule.
+  const { account } = await getWalletClient();
+  const ownerAddress = account.address;
+  const ownerKeyHex  = await getEncryptionKey(ownerAddress);
+  if (!ownerKeyHex || ownerKeyHex === "0x") {
+    throw new Error("Register an encryption key first (visit /register) — required to seal a private capsule.");
+  }
+  const allRecipients = _dedupeRecipients([
+    { address: ownerAddress, pubkey: hexToBytes(ownerKeyHex) },
+    ...recipients,
+  ]);
 
   // 3. Upload to 0G Storage
   const { rootHash: storageRoot } = await uploadToStorage(packed);
 
-  // 4. Commit on-chain
+  // 4. Commit on-chain. On-chain `recipients` stays the caller-supplied list (for
+  // the recipient index / gallery); the owner is provisioned a key separately.
   const recipientAddresses = recipients.map(r => r.address);
   const unlockTimestamp    = BigInt(Math.floor(unlockTime.getTime() / 1000));
   const triggerType        = trigger?.type ?? TriggerType.TIME;
@@ -179,15 +240,15 @@ export async function sealCapsule(params: SealParams): Promise<SealResult> {
   const { txHash, capsuleId } = await sealOnChain({
     storageRoot,
     commitHash,
-    timelockHeader: `0x${Buffer.from(timelockHeader).toString("hex")}`,
+    timelockHeader: "0x",            // no public key blob — confidentiality lives in the envelopes
     unlockTime:     unlockTimestamp,
     recipients:     recipientAddresses,
     triggerType,
     triggerContract: resolvedTriggerContract,
   });
 
-  // 5. Stage 2: deposit ECIES-encrypted dataKey per recipient
-  await _distributeRecipientKeys(capsuleId, recipients, dataKey);
+  // 5. Stage 2: ECIES-wrap the time-locked key blob for owner + each recipient
+  await _distributeRecipientKeys(capsuleId, allRecipients, keyBlob);
 
   // 6. Stage 3: set up trigger module after seal
   if (trigger && trigger.type !== TriggerType.TIME) {
@@ -200,72 +261,32 @@ export async function sealCapsule(params: SealParams): Promise<SealResult> {
 // ── Reveal ────────────────────────────────────────────────────────────────────
 
 export async function revealCapsule(
-  capsuleId: `0x${string}`
+  capsuleId: `0x${string}`,
+  address:   `0x${string}`,
+  privKey:   Uint8Array,
 ): Promise<RevealResult> {
-  const { timelockHeader: headerHex } = await revealOnChain(capsuleId);
-  const timelockHeader = Buffer.from(headerHex.slice(2), "hex");
-
-  const cap    = await getCapsule(capsuleId);
-  const packed = await downloadFromStorage(cap.storageRoot);
-
-  const { plaintext, commitHash, verified } =
-    await _decryptOwnerCapsule(capsuleId, timelockHeader, packed);
-
-  return { capsuleId, plaintext, commitHash, verified };
+  // On-chain record of the open (and fires any DEADMAN/MULTISIG trigger). Decryption
+  // itself does NOT depend on this tx — it is gated client-side by the caller's
+  // recipient key plus the drand round, so the reveal event leaks nothing.
+  await revealOnChain(capsuleId);
+  const keyBlob = await _recoverKeyBlob(capsuleId, address, privKey);
+  return _decryptWithKeyBlob(capsuleId, keyBlob);
 }
 
 /**
- * Stage 2: Decrypt a capsule as a designated recipient using their stored ECIES private key.
- * The capsule must already be revealed on-chain.
+ * Decrypt a capsule as the owner or a designated recipient, using the ECIES
+ * private key held in this browser. No on-chain reveal tx required — the time
+ * gate is enforced cryptographically by the drand round inside the key blob.
  *
  * @param capsuleId   Capsule to decrypt
- * @param privKey     Recipient's secp256k1 private key (from localStorage via loadPrivKeyFromStorage)
+ * @param address     The connected wallet (must have an envelope on this capsule)
+ * @param privKey     This wallet's secp256k1 private key (loadPrivKeyFromStorage)
  */
 export async function decryptAsRecipient(
   capsuleId: `0x${string}`,
   address:   `0x${string}`,
   privKey:   Uint8Array
 ): Promise<RevealResult> {
-  const cap = await getCapsule(capsuleId);
-  if (cap.state !== 1) throw new Error("Capsule not yet revealed on-chain");
-
-  // Fetch the ECIES-encrypted envelope for this recipient
-  const envelopeHex = await getRecipientKey(capsuleId, address);
-  if (!envelopeHex || envelopeHex === "0x") {
-    throw new Error("No encrypted key found for your address on this capsule");
-  }
-
-  const envelope = hexToBytes(envelopeHex);
-  const dataKey  = eciesDecrypt(privKey, envelope);
-
-  const packed   = await downloadFromStorage(cap.storageRoot);
-
-  // AES-decrypt with the ECIES-recovered dataKey
-  const nonce1    = packed.slice(0, NONCE_LEN);
-  const ct        = packed.slice(NONCE_LEN);
-  const plaintext = bytesToUtf8(gcm(dataKey, nonce1).decrypt(ct));
-
-  const hash     = makeCommitHash(plaintext);
-  const verified = await verifyOnChain(capsuleId, hash);
-
-  return { capsuleId, plaintext, commitHash: hash, verified };
-}
-
-/**
- * Read-only decrypt for already-revealed capsules (state === REVEALED).
- * No tx or signature required.
- */
-export async function decryptRevealed(
-  capsuleId: `0x${string}`
-): Promise<RevealResult> {
-  const cap = await getCapsule(capsuleId);
-  if (cap.state !== 1) throw new Error("Capsule not yet revealed on-chain");
-
-  const timelockHeader = Buffer.from(cap.timelockHeader.slice(2), "hex");
-  const packed         = await downloadFromStorage(cap.storageRoot);
-
-  const { plaintext, commitHash, verified } =
-    await _decryptOwnerCapsule(capsuleId, timelockHeader, packed);
-
-  return { capsuleId, plaintext, commitHash, verified };
+  const keyBlob = await _recoverKeyBlob(capsuleId, address, privKey);
+  return _decryptWithKeyBlob(capsuleId, keyBlob);
 }

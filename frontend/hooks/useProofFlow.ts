@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useAccount } from "wagmi";
 import { getCapsule, isUnlocked } from "@/lib/contract";
-import { revealCapsule, decryptRevealed, decryptAsRecipient } from "@/lib/capsule";
+import { revealCapsule, decryptAsRecipient } from "@/lib/capsule";
 import { loadPrivKeyFromStorage, hasSavedPrivKey } from "@/lib/ecies";
 import { mintCapsuleNFT, getCapsuleTokenId } from "@/lib/nft";
 import { CONTRACT_ADDRESSES } from "@/constants/contracts";
@@ -83,35 +83,38 @@ export function useProofFlow(capsuleId: `0x${string}`): ProofFlowState & ProofFl
     }
   }
 
+  // Every capsule is private: decryption always uses this wallet's local ECIES key,
+  // for owner and recipients alike. No public/timelock-only path exists anymore.
+  function requireKey(): Uint8Array {
+    if (!address) throw new Error("Connect your wallet first");
+    const privKey = loadPrivKeyFromStorage(address);
+    if (!privKey) throw new Error("No local encryption key found. Visit /register to import or regenerate.");
+    return privKey;
+  }
+
   async function handleReveal() {
     setLoading(true); setError(""); setStatus("Sending reveal tx…");
     try {
-      setResult(await revealCapsule(capsuleId));
+      const privKey = requireKey();
+      setStatus("Revealing + decrypting…");
+      setResult(await revealCapsule(capsuleId, address!, privKey));
     } catch (e: unknown) {
       setError(formatError(e));
     } finally { setLoading(false); setStatus(""); }
   }
 
   async function handleDecrypt() {
-    setLoading(true); setError(""); setStatus("Decrypting…");
+    setLoading(true); setError(""); setStatus("Decrypting with your local key…");
     try {
-      setResult(await decryptRevealed(capsuleId));
+      const privKey = requireKey();
+      setResult(await decryptAsRecipient(capsuleId, address!, privKey));
     } catch (e: unknown) {
       setError(formatError(e));
     } finally { setLoading(false); setStatus(""); }
   }
 
-  async function handleRecipientDecrypt() {
-    if (!address) return;
-    setLoading(true); setError(""); setStatus("Decrypting with your local key…");
-    try {
-      const privKey = loadPrivKeyFromStorage(address);
-      if (!privKey) throw new Error("No local encryption key found. Visit /register to import or regenerate.");
-      setResult(await decryptAsRecipient(capsuleId, address, privKey));
-    } catch (e: unknown) {
-      setError(formatError(e));
-    } finally { setLoading(false); }
-  }
+  // Kept as a distinct name for the recipient-specific button; same local-key path.
+  const handleRecipientDecrypt = handleDecrypt;
 
   async function handleMintNFT() {
     setNftLoading(true);
