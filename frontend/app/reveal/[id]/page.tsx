@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { use } from "react";
 import { useAccount } from "wagmi";
 import { LockOpen, Lock } from "lucide-react";
 import { toast } from "sonner";
@@ -12,10 +11,10 @@ import { revealCapsule, decryptRevealed } from "@/lib/capsule";
 import type { OnChainCapsule, RevealResult } from "@/lib/types";
 import { CapsuleState } from "@/lib/types";
 
-interface Props { params: Promise<{ id: string }>; }
+interface Props { params: { id: string }; }
 
 export default function RevealPage({ params }: Props) {
-  const { id } = use(params);
+  const { id } = params;
   const capsuleId = id as `0x${string}`;
   const { isConnected } = useAccount();
 

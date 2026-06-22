@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect } from "react";
 import { useAccount } from "wagmi";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -11,8 +11,8 @@ import { revealOnChain } from "../../../../lib/contract";
 import { cn } from "../../../../lib/utils";
 import type { SwitchInfo } from "../../../../lib/types";
 
-export default function DeadManPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function DeadManPage({ params }: { params: { id: string } }) {
+  const { id } = params;
   const capsuleId = id as `0x${string}`;
   const { isConnected, address } = useAccount();
 
