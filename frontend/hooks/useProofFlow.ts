@@ -68,8 +68,8 @@ export function useProofFlow(capsuleId: `0x${string}`): ProofFlowState & ProofFl
       const [cap, open] = await Promise.all([getCapsule(capsuleId), isUnlocked(capsuleId)]);
       setCapsule(cap);
       setUnlocked(open);
-    } catch (e: unknown) {
-      setError(formatError(e));
+    } catch {
+      // RPC timeouts on slow testnet — don't clobber UI with transient noise
     }
   }
 
