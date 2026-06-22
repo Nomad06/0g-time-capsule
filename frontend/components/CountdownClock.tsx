@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { Lock, Unlock } from "lucide-react";
 
 interface Props {
   unlockDate: Date;
@@ -24,11 +25,13 @@ export function CountdownClock({ unlockDate, isUnlocked, compact }: Props) {
   const s     = Math.floor((total % 60000) / 1000);
 
   if (isUnlocked) {
-    if (compact) return <span className="text-xs text-green-400">🔓 Unlocked</span>;
+    if (compact) return <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-400"><Unlock className="h-3 w-3" /> Unlocked</span>;
     return (
-      <div className="rounded-[10px] border border-green-800 bg-green-950 p-6 text-center">
-        <span className="mr-2.5 text-[22px]">🔓</span>
-        <span className="text-base font-bold text-green-400">Capsule is now unlocked</span>
+      <div className="glass-card border-emerald-500/20 bg-emerald-950/20 p-6 text-center rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.05)]">
+        <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400">
+          <Unlock className="h-5 w-5" />
+        </div>
+        <span className="text-base font-title font-bold text-emerald-400 glow-text-primary">Capsule is now unlocked</span>
       </div>
     );
   }
@@ -38,34 +41,43 @@ export function CountdownClock({ unlockDate, isUnlocked, compact }: Props) {
     if (d > 0) parts.push(`${d}d`);
     if (h > 0 || d > 0) parts.push(`${h}h`);
     parts.push(`${m}m`);
-    return <span className="text-xs text-indigo-300">🔒 {parts.join(" ")}</span>;
+    return <span className="inline-flex items-center gap-1 text-xs font-semibold text-violet-400"><Lock className="h-3 w-3 text-violet-500" /> {parts.join(" ")}</span>;
   }
 
   return (
-    <div className="rounded-[10px] border border-indigo-950 bg-[#0f0f1a] p-6 text-center">
-      <p className="mb-3 text-[11px] uppercase tracking-[1px] text-muted-foreground/60">
-        Unlocks in
+    <div className="glass-card-glow p-7 text-center rounded-2xl relative overflow-hidden">
+      <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-violet-600/10 blur-2xl" />
+      <div className="absolute -left-10 -bottom-10 h-32 w-32 rounded-full bg-fuchsia-600/10 blur-2xl" />
+      
+      <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20 animate-pulse">
+        <Lock className="h-5 w-5" />
+      </div>
+
+      <p className="mb-4 text-[10px] font-bold uppercase tracking-widest text-violet-400/80">
+        Time Lock Protocol Active
       </p>
-      <div className="flex justify-center gap-4">
+      
+      <div className="flex justify-center gap-5">
         {d > 0 && <Unit n={d} label="days" />}
         <Unit n={h} label="hours" />
-        <Unit n={m} label="min" />
-        <Unit n={s} label="sec" />
+        <Unit n={m} label="mins" />
+        <Unit n={s} label="secs" />
       </div>
-      <p className="mt-3 text-xs text-muted-foreground/40">
-        {unlockDate.toLocaleString()}
-      </p>
+      
+      <div className="mt-5 inline-block rounded-full bg-white/[0.03] px-3.5 py-1 text-[11px] font-medium text-muted-foreground border border-white/[0.05]">
+        Target: {unlockDate.toLocaleString()}
+      </div>
     </div>
   );
 }
 
 function Unit({ n, label }: { n: number; label: string }) {
   return (
-    <div className="min-w-[48px] text-center">
-      <div className="text-[32px] font-bold tabular-nums text-indigo-300">
+    <div className="min-w-[54px] rounded-lg bg-black/30 border border-white/[0.03] py-2.5 px-1.5 shadow-[inset_0_1px_1px_rgba(255,255,255,0.02)]">
+      <div className="text-3xl font-bold font-title tabular-nums bg-gradient-to-b from-white to-violet-300 bg-clip-text text-transparent leading-none">
         {String(n).padStart(2, "0")}
       </div>
-      <div className="text-[10px] uppercase tracking-[1px] text-muted-foreground/60">{label}</div>
+      <div className="mt-1 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">{label}</div>
     </div>
   );
 }

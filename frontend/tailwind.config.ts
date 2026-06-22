@@ -45,6 +45,7 @@ const config: Config = {
       },
       fontFamily: {
         sans: ["var(--font-inter)", "system-ui", "sans-serif"],
+        title: ["var(--font-space-grotesk)", "sans-serif"],
       },
       borderRadius: {
         lg: "var(--radius)",
