@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useAccount } from "wagmi";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -52,6 +52,13 @@ export function useSealForm(): SealFormState & SealFormActions {
   const { isConnected } = useAccount();
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const redirectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (redirectTimer.current !== null) clearTimeout(redirectTimer.current);
+    };
+  }, []);
 
   // content mode
   const [contentMode, setContentMode] = useState<"text" | "file">("text");
@@ -140,7 +147,7 @@ export function useSealForm(): SealFormState & SealFormActions {
       setResult(res);
       setSealed(true);
       toast.success("Capsule sealed!", { description: `ID: ${res.capsuleId.slice(0, 18)}…` });
-      setTimeout(() => router.push(`/proof/${res.capsuleId}`), 1800);
+      redirectTimer.current = setTimeout(() => router.push(`/proof/${res.capsuleId}`), 1800);
     } catch (e: unknown) {
       toast.error("Seal failed", { description: formatError(e) });
     } finally { setLoading(false); setStatus(""); }
