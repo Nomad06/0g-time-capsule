@@ -10,6 +10,7 @@ import { ConnectButton } from "@/components/ConnectButton";
 import { getCapsule, isUnlocked } from "@/lib/contract";
 import { revealCapsule, decryptRevealed } from "@/lib/capsule";
 import type { OnChainCapsule, RevealResult } from "@/lib/types";
+import { CapsuleState } from "@/lib/types";
 
 interface Props { params: Promise<{ id: string }>; }
 
@@ -58,7 +59,7 @@ export default function RevealPage({ params }: Props) {
   }
 
   const unlockDate      = capsule ? new Date(Number(capsule.unlockTime) * 1000) : null;
-  const alreadyRevealed = capsule?.state === 1;
+  const alreadyRevealed = capsule?.state === CapsuleState.REVEALED;
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-12 sm:px-6">
