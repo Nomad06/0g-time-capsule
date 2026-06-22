@@ -1,7 +1,7 @@
 import { getPublicClient, getWalletClient } from "./contract";
 import { CONTRACT_ADDRESSES, CAPSULE_NFT_ABI } from "../constants/contracts";
 import { zeroGTestnet } from "../constants/contracts";
-import type { Hash } from "viem";
+import { parseEventLogs, type Hash } from "viem";
 
 export async function mintCapsuleNFT(capsuleId: `0x${string}`): Promise<{ tokenId: bigint; txHash: Hash }> {
   const wallet = await getWalletClient();
@@ -17,10 +17,15 @@ export async function mintCapsuleNFT(capsuleId: `0x${string}`): Promise<{ tokenI
   });
 
   const receipt = await pub.waitForTransactionReceipt({ hash: txHash });
-  // parse CapsuleMinted event
-  const log = receipt.logs.find(l => l.topics[0] !== undefined);
-  // tokenId is the second indexed topic (topics[2])
-  const tokenId = log?.topics[2] ? BigInt(log.topics[2]) : 0n;
+
+  const logs = parseEventLogs({
+    abi:       CAPSULE_NFT_ABI,
+    logs:      receipt.logs,
+    eventName: "CapsuleMinted",
+  });
+
+  if (!logs[0]) throw new Error("CapsuleMinted event not found in receipt");
+  const tokenId = (logs[0].args as { tokenId: bigint }).tokenId;
 
   return { tokenId, txHash };
 }
