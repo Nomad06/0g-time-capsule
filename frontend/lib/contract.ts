@@ -7,9 +7,13 @@ import {
   createPublicClient,
   http,
   parseEventLogs,
+  TransactionNotFoundError,
+  TransactionReceiptNotFoundError,
+  WaitForTransactionReceiptTimeoutError,
   type WalletClient,
   type PublicClient,
   type Hash,
+  type TransactionReceipt,
 } from "viem";
 import { getWalletClient as wagmiGetWalletClient } from "@wagmi/core";
 import { wagmiConfig } from "./wagmi-config";
@@ -55,18 +59,51 @@ export async function getWalletClient(): Promise<WalletClient & { account: NonNu
 type WriteContractArgs = Parameters<WalletClient["writeContract"]>[0];
 
 /**
+ * Receipt wait tolerant of 0G's load-balanced public RPC.
+ *
+ * Writes broadcast through the wallet's RPC, but receipts are polled from the
+ * public client's endpoint. A freshly broadcast tx is often "not found" on
+ * whichever replica serves the poll until the broadcast propagates — viem then
+ * exhausts its small default retryCount and throws TransactionReceiptNotFoundError.
+ * This surfaces most when sealing *with recipients*, where seal() and
+ * setRecipientKeys() fire back-to-back and the second tx is polled immediately.
+ *
+ * Swallow the transient not-found / timeout errors and keep polling to a deadline.
+ */
+export async function waitForReceipt(hash: Hash): Promise<TransactionReceipt> {
+  const pub      = getPublicClient();
+  const deadline = Date.now() + 120_000;
+  for (;;) {
+    try {
+      return await pub.waitForTransactionReceipt({
+        hash,
+        timeout:         Math.max(8_000, deadline - Date.now()),
+        pollingInterval: 4_000,
+        retryCount:      30,
+      });
+    } catch (err) {
+      const propagating =
+        err instanceof TransactionReceiptNotFoundError ||
+        err instanceof TransactionNotFoundError ||
+        err instanceof WaitForTransactionReceiptTimeoutError;
+      if (propagating && Date.now() < deadline) continue;
+      throw err;
+    }
+  }
+}
+
+/**
  * Wallet write + receipt wait in one call.
  * Injects account and chain so callers don't repeat them.
  */
 async function writeAndWait(args: Omit<WriteContractArgs, "account" | "chain">): Promise<Hash> {
   const wallet = await getWalletClient();
-  const pub    = getPublicClient();
   const txHash = await wallet.writeContract({
     ...args,
     account: wallet.account,
     chain:   zeroGTestnet,
   } as WriteContractArgs);
-  await pub.waitForTransactionReceipt({ hash: txHash, timeout: 120_000 });
+  await waitForReceipt(txHash);
   return txHash;
 }
 
@@ -89,7 +126,6 @@ export interface SealTxResult {
 
 export async function sealOnChain(params: SealContractParams): Promise<SealTxResult> {
   const wallet = await getWalletClient();
-  const pub    = getPublicClient();
   const account = wallet.account;
 
   const txHash = await wallet.writeContract({
@@ -110,7 +146,7 @@ export async function sealOnChain(params: SealContractParams): Promise<SealTxRes
     ],
   });
 
-  const receipt = await pub.waitForTransactionReceipt({ hash: txHash, timeout: 120_000 });
+  const receipt = await waitForReceipt(txHash);
 
   const logs = parseEventLogs({
     abi:  TIME_CAPSULE_ABI,
@@ -133,7 +169,6 @@ export interface RevealTxResult {
 
 export async function revealOnChain(capsuleId: `0x${string}`): Promise<RevealTxResult> {
   const wallet = await getWalletClient();
-  const pub    = getPublicClient();
   const account = wallet.account;
 
   const txHash = await wallet.writeContract({
@@ -145,7 +180,7 @@ export async function revealOnChain(capsuleId: `0x${string}`): Promise<RevealTxR
     args: [capsuleId],
   });
 
-  const receipt = await pub.waitForTransactionReceipt({ hash: txHash, timeout: 120_000 });
+  const receipt = await waitForReceipt(txHash);
 
   const logs = parseEventLogs({
     abi:  TIME_CAPSULE_ABI,

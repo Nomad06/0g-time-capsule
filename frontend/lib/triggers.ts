@@ -9,7 +9,7 @@ import {
   DEAD_MAN_SWITCH_ABI,
   MULTI_SIG_REVEAL_ABI,
 } from "../constants/contracts";
-import { getPublicClient, getWalletClient } from "./contract";
+import { getPublicClient, getWalletClient, waitForReceipt } from "./contract";
 import type { SwitchInfo, VaultInfo } from "./types";
 
 // ── DeadManSwitch ─────────────────────────────────────────────────────────────
@@ -20,7 +20,6 @@ export async function armSwitch(
   interval:  bigint          // seconds
 ): Promise<Hash> {
   const wallet = await getWalletClient();
-  const pub    = getPublicClient();
   const account = wallet.account;
 
   const tx = await wallet.writeContract({
@@ -31,13 +30,12 @@ export async function armSwitch(
     functionName: "arm",
     args:         [capsuleId, owner, interval],
   });
-  await pub.waitForTransactionReceipt({ hash: tx, timeout: 120_000 });
+  await waitForReceipt(tx);
   return tx;
 }
 
 export async function checkin(capsuleId: `0x${string}`): Promise<Hash> {
   const wallet = await getWalletClient();
-  const pub    = getPublicClient();
   const account = wallet.account;
 
   const tx = await wallet.writeContract({
@@ -48,13 +46,12 @@ export async function checkin(capsuleId: `0x${string}`): Promise<Hash> {
     functionName: "checkin",
     args:         [capsuleId],
   });
-  await pub.waitForTransactionReceipt({ hash: tx, timeout: 120_000 });
+  await waitForReceipt(tx);
   return tx;
 }
 
 export async function triggerSwitch(capsuleId: `0x${string}`): Promise<Hash> {
   const wallet = await getWalletClient();
-  const pub    = getPublicClient();
   const account = wallet.account;
 
   const tx = await wallet.writeContract({
@@ -65,7 +62,7 @@ export async function triggerSwitch(capsuleId: `0x${string}`): Promise<Hash> {
     functionName: "trigger",
     args:         [capsuleId],
   });
-  await pub.waitForTransactionReceipt({ hash: tx, timeout: 120_000 });
+  await waitForReceipt(tx);
   return tx;
 }
 
@@ -118,7 +115,6 @@ export async function createVault(
   threshold: number
 ): Promise<Hash> {
   const wallet = await getWalletClient();
-  const pub    = getPublicClient();
   const account = wallet.account;
 
   const tx = await wallet.writeContract({
@@ -129,13 +125,12 @@ export async function createVault(
     functionName: "create",
     args:         [capsuleId, owner, signers, threshold],
   });
-  await pub.waitForTransactionReceipt({ hash: tx, timeout: 120_000 });
+  await waitForReceipt(tx);
   return tx;
 }
 
 export async function approveReveal(capsuleId: `0x${string}`): Promise<Hash> {
   const wallet = await getWalletClient();
-  const pub    = getPublicClient();
   const account = wallet.account;
 
   const tx = await wallet.writeContract({
@@ -146,7 +141,7 @@ export async function approveReveal(capsuleId: `0x${string}`): Promise<Hash> {
     functionName: "approve",
     args:         [capsuleId],
   });
-  await pub.waitForTransactionReceipt({ hash: tx, timeout: 120_000 });
+  await waitForReceipt(tx);
   return tx;
 }
 

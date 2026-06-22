@@ -436,4 +436,8 @@ export const CAPSULE_NFT_ABI = [
       { name: "minter",    type: "address", indexed: true  },
     ],
   },
+  // Custom errors — needed so viem can decode mint() revert reasons.
+  { type: "error", name: "AlreadyMinted",          inputs: [] },
+  { type: "error", name: "NotCapsuleOwner",        inputs: [] },
+  { type: "error", name: "CapsuleAlreadyRevealed", inputs: [] },
 ] as const;
