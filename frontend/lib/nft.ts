@@ -16,7 +16,7 @@ export async function mintCapsuleNFT(capsuleId: `0x${string}`): Promise<{ tokenI
     args:         [capsuleId],
   });
 
-  const receipt = await pub.waitForTransactionReceipt({ hash: txHash });
+  const receipt = await pub.waitForTransactionReceipt({ hash: txHash, timeout: 120_000 });
 
   const logs = parseEventLogs({
     abi:       CAPSULE_NFT_ABI,

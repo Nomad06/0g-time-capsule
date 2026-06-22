@@ -60,7 +60,7 @@ async function writeAndWait(args: Omit<WriteContractArgs, "account" | "chain">):
     account: wallet.account,
     chain:   zeroGTestnet,
   } as WriteContractArgs);
-  await pub.waitForTransactionReceipt({ hash: txHash });
+  await pub.waitForTransactionReceipt({ hash: txHash, timeout: 120_000 });
   return txHash;
 }
 
@@ -104,7 +104,7 @@ export async function sealOnChain(params: SealContractParams): Promise<SealTxRes
     ],
   });
 
-  const receipt = await pub.waitForTransactionReceipt({ hash: txHash });
+  const receipt = await pub.waitForTransactionReceipt({ hash: txHash, timeout: 120_000 });
 
   const logs = parseEventLogs({
     abi:  TIME_CAPSULE_ABI,
@@ -139,7 +139,7 @@ export async function revealOnChain(capsuleId: `0x${string}`): Promise<RevealTxR
     args: [capsuleId],
   });
 
-  const receipt = await pub.waitForTransactionReceipt({ hash: txHash });
+  const receipt = await pub.waitForTransactionReceipt({ hash: txHash, timeout: 120_000 });
 
   const logs = parseEventLogs({
     abi:  TIME_CAPSULE_ABI,

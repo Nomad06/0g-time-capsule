@@ -37,7 +37,8 @@ import {
   getWalletClient,
 } from "./contract";
 import { armSwitch, createVault } from "./triggers";
-import { roundForTime } from "./drand";
+import { getOrCreateDrandClient, roundForTime } from "./drand";
+import { CONTRACT_ADDRESSES } from "../constants/contracts";
 import { TriggerType } from "./types";
 import type { SealParams, SealResult, RevealResult, TriggerConfig, RecipientParam } from "./types";
 
@@ -55,8 +56,10 @@ async function _buildEncryption(
   plaintext:  string,
   unlockTime: Date
 ): Promise<EncryptionResult> {
+  // Probe once, reuse client for both roundForTime and tlock encryption
+  const client     = await getOrCreateDrandClient();
   const drandRound = await roundForTime(unlockTime);
-  const { packed, timelockHeader, commitHash, dataKey } = encryptForSeal(plaintext, drandRound);
+  const { packed, timelockHeader, commitHash, dataKey } = await encryptForSeal(plaintext, drandRound, client);
   return { packed, timelockHeader, commitHash, dataKey, drandRound };
 }
 
@@ -69,6 +72,28 @@ async function _distributeRecipientKeys(
   const recipientAddresses = recipients.map(r => r.address);
   const encryptedKeys      = recipients.map(r => bytesToHex(eciesEncrypt(r.pubkey, dataKey)));
   await setRecipientKeys(capsuleId, recipientAddresses, encryptedKeys);
+}
+
+/**
+ * Validate trigger config before any on-chain action. Trigger setup runs *after*
+ * seal(), so a config the trigger contract would reject (e.g. MULTISIG threshold >
+ * signer count) must be caught here — otherwise the capsule is sealed with a
+ * triggerContract pointing at a vault/switch that never gets created, leaving the
+ * capsule permanently unrevealable.
+ */
+function _validateTrigger(trigger: TriggerConfig): void {
+  if (trigger.type === TriggerType.DEADMAN) {
+    if (trigger.intervalDays < 1) {
+      throw new Error("Dead Man's Switch interval must be at least 1 day");
+    }
+  } else if (trigger.type === TriggerType.MULTISIG) {
+    if (trigger.signers.length === 0) {
+      throw new Error("Multi-sig requires at least one signer");
+    }
+    if (trigger.threshold < 1 || trigger.threshold > trigger.signers.length) {
+      throw new Error(`Multi-sig threshold must be between 1 and ${trigger.signers.length}`);
+    }
+  }
 }
 
 async function _setupTrigger(
@@ -94,7 +119,7 @@ async function _decryptOwnerCapsule(
   timelockHeader: Uint8Array,
   packed:         Uint8Array
 ): Promise<{ plaintext: string; commitHash: `0x${string}`; verified: boolean }> {
-  const plaintext = decryptFromReveal(packed, timelockHeader);
+  const plaintext = await decryptFromReveal(packed, timelockHeader);
   const hash      = makeCommitHash(plaintext);
   const verified  = await verifyOnChain(capsuleId, hash);
   return { plaintext, commitHash: hash, verified };
@@ -107,6 +132,7 @@ export async function sealCapsule(params: SealParams): Promise<SealResult> {
 
   if (!plaintext.trim())       throw new Error("Plaintext cannot be empty");
   if (unlockTime <= new Date()) throw new Error("Unlock time must be in the future");
+  if (trigger && trigger.type !== TriggerType.TIME) _validateTrigger(trigger);
 
   // 1 + 2. Compute drand round + encrypt
   const { packed, timelockHeader, commitHash, dataKey, drandRound } =
@@ -120,6 +146,15 @@ export async function sealCapsule(params: SealParams): Promise<SealResult> {
   const unlockTimestamp    = BigInt(Math.floor(unlockTime.getTime() / 1000));
   const triggerType        = trigger?.type ?? TriggerType.TIME;
 
+  // Wire the on-chain trigger contract so reveal() consults the switch/vault.
+  // Without this, DEADMAN/MULTISIG capsules fall back to plain time-unlock,
+  // silently bypassing the trigger. Explicit triggerContract param wins.
+  const resolvedTriggerContract =
+    triggerContract ??
+    (triggerType === TriggerType.DEADMAN  ? CONTRACT_ADDRESSES.DeadManSwitch  :
+     triggerType === TriggerType.MULTISIG ? CONTRACT_ADDRESSES.MultiSigReveal :
+     undefined);
+
   const { txHash, capsuleId } = await sealOnChain({
     storageRoot,
     commitHash,
@@ -127,7 +162,7 @@ export async function sealCapsule(params: SealParams): Promise<SealResult> {
     unlockTime:     unlockTimestamp,
     recipients:     recipientAddresses,
     triggerType,
-    triggerContract,
+    triggerContract: resolvedTriggerContract,
   });
 
   // 5. Stage 2: deposit ECIES-encrypted dataKey per recipient

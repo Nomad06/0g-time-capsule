@@ -2,6 +2,7 @@
   "network": "zerogTestnet",
   "chainId": "16602",
   "deployedAt": "2026-06-18T14:34:42.555Z",
+  "deployBlock": null,
   "contracts": {
     "TimeCapsule": "0x4C381a041E5E961fB28D46F131bc45ED3a6caAE9",
     "KeyRegistry": "0xb8a0e25d8BC2E0a5Eb6F93dB14006380216A5730",
