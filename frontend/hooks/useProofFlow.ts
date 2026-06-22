@@ -8,6 +8,7 @@ import { loadPrivKeyFromStorage, hasSavedPrivKey } from "@/lib/ecies";
 import { mintCapsuleNFT, getCapsuleTokenId } from "@/lib/nft";
 import { CONTRACT_ADDRESSES } from "@/constants/contracts";
 import { formatError } from "@/lib/utils";
+import { CapsuleState } from "@/lib/types";
 import type { OnChainCapsule, RevealResult } from "@/lib/types";
 
 export interface ProofFlowState {
@@ -85,20 +86,19 @@ export function useProofFlow(capsuleId: `0x${string}`): ProofFlowState & ProofFl
   async function handleReveal() {
     setLoading(true); setError(""); setStatus("Sending reveal tx…");
     try {
-      setStatus("Sign to decrypt…");
       setResult(await revealCapsule(capsuleId));
     } catch (e: unknown) {
       setError(formatError(e));
-    } finally { setLoading(false); }
+    } finally { setLoading(false); setStatus(""); }
   }
 
   async function handleDecrypt() {
-    setLoading(true); setError(""); setStatus("Sign to decrypt…");
+    setLoading(true); setError(""); setStatus("Decrypting…");
     try {
       setResult(await decryptRevealed(capsuleId));
     } catch (e: unknown) {
       setError(formatError(e));
-    } finally { setLoading(false); }
+    } finally { setLoading(false); setStatus(""); }
   }
 
   async function handleRecipientDecrypt() {
@@ -134,7 +134,7 @@ export function useProofFlow(capsuleId: `0x${string}`): ProofFlowState & ProofFl
   const isRecipient    = !!(capsule && address &&
     capsule.recipients.some(r => r.toLowerCase() === address.toLowerCase()));
   const hasLocalKey    = address ? hasSavedPrivKey(address) : false;
-  const alreadyRevealed = capsule?.state === 1;
+  const alreadyRevealed = capsule?.state === CapsuleState.REVEALED;
   const unlockDate      = capsule ? new Date(Number(capsule.unlockTime) * 1000) : null;
   const sealDate        = capsule ? new Date(Number(capsule.createdAt) * 1000) : null;
 

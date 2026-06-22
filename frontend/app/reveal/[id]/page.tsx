@@ -42,7 +42,6 @@ export default function RevealPage({ params }: Props) {
   async function handleReveal() {
     setLoading(true); setStatus("Sending reveal tx…");
     try {
-      setStatus("Sign to decrypt…");
       setResult(await revealCapsule(capsuleId));
     } catch (e: unknown) {
       toast.error("Reveal failed", { description: e instanceof Error ? e.message : String(e) });
@@ -50,7 +49,7 @@ export default function RevealPage({ params }: Props) {
   }
 
   async function handleDecryptAlreadyRevealed() {
-    setLoading(true); setStatus("Sign to decrypt…");
+    setLoading(true); setStatus("Decrypting…");
     try {
       setResult(await decryptRevealed(capsuleId));
     } catch (e: unknown) {

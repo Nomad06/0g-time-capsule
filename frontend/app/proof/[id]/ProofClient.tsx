@@ -5,6 +5,7 @@ import { nftMarketplaceUrl } from "../../../lib/nft";
 import { HashVerifyAnimation } from "../../../components/HashVerifyAnimation";
 import { CountdownClock } from "../../../components/CountdownClock";
 import { Button } from "../../../components/ui/button";
+import { TriggerType } from "../../../lib/types";
 import { useProofFlow } from "../../../hooks/useProofFlow";
 import { usePoll } from "../../../hooks/usePoll";
 
@@ -96,7 +97,7 @@ export function ProofClient({ capsuleId }: Props) {
       )}
 
       {/* Stage 3: trigger management links */}
-      {capsule && capsule.triggerType === 1 && (
+      {capsule && capsule.triggerType === TriggerType.DEADMAN && (
         <div className="my-4 px-4 py-3 bg-orange-950/30 border border-orange-900 rounded-lg">
           <span className="text-orange-400 text-sm font-bold">Dead Man&apos;s Switch</span>
           {" — "}
@@ -105,7 +106,7 @@ export function ProofClient({ capsuleId }: Props) {
           </Link>
         </div>
       )}
-      {capsule && capsule.triggerType === 3 && (
+      {capsule && capsule.triggerType === TriggerType.MULTISIG && (
         <div className="my-4 px-4 py-3 bg-indigo-950/30 border border-indigo-900 rounded-lg">
           <span className="text-indigo-300 text-sm font-bold">Multi-Sig Reveal</span>
           {" — "}
