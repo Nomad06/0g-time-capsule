@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button";
 import { ConnectButton } from "@/components/ConnectButton";
 import { getCapsule, isUnlocked } from "@/lib/contract";
 import { revealCapsule, decryptAsRecipient } from "@/lib/capsule";
-import { loadPrivKeyFromStorage } from "@/lib/ecies";
+import { hasSavedPrivKey } from "@/lib/ecies";
+import { getOrCreateIdentityKey } from "@/lib/identity";
 import type { OnChainCapsule, RevealResult } from "@/lib/types";
 import { CapsuleState } from "@/lib/types";
 
@@ -41,20 +42,19 @@ export default function RevealPage({ params }: Props) {
     return () => { cancel = true; clearInterval(t); };
   }, [capsuleId]);
 
-  // Private capsules can only be decrypted with the wallet's local ECIES key.
-  function requireKey(): Uint8Array {
+  // Private capsules decrypt with the wallet's ECIES key. It's derived from a
+  // wallet signature, so when it isn't cached on this device we re-derive it
+  // (quick, gasless signature) instead of forcing the user to /register.
+  async function requireKey(): Promise<Uint8Array> {
     if (!address) throw new Error("Connect your wallet first");
-    const privKey = loadPrivKeyFromStorage(address);
-    if (!privKey) {
-      throw new Error("No encryption key on this device — register or import it at /register, then retry.");
-    }
+    const { privKey } = await getOrCreateIdentityKey(address);
     return privKey;
   }
 
   async function handleReveal() {
     setLoading(true); setStatus("Sending reveal tx…");
     try {
-      const privKey = requireKey();
+      const privKey = await requireKey();
       setStatus("Revealing + decrypting…");
       setResult(await revealCapsule(capsuleId, address!, privKey));
     } catch (e: unknown) {
@@ -65,7 +65,7 @@ export default function RevealPage({ params }: Props) {
   async function handleDecryptAlreadyRevealed() {
     setLoading(true); setStatus("Decrypting…");
     try {
-      const privKey = requireKey();
+      const privKey = await requireKey();
       setResult(await decryptAsRecipient(capsuleId, address!, privKey));
     } catch (e: unknown) {
       toast.error("Decryption failed", { description: e instanceof Error ? e.message : String(e) });
@@ -74,7 +74,7 @@ export default function RevealPage({ params }: Props) {
 
   const unlockDate      = capsule ? new Date(Number(capsule.unlockTime) * 1000) : null;
   const alreadyRevealed = capsule?.state === CapsuleState.REVEALED;
-  const hasLocalKey     = !!address && !!loadPrivKeyFromStorage(address);
+  const hasLocalKey     = !!address && hasSavedPrivKey(address);
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-12 sm:px-6">

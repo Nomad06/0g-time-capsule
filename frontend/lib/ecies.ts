@@ -70,6 +70,33 @@ export function generateEncryptionKeypair(): { privKey: Uint8Array; pubKey: Uint
   return { privKey, pubKey };
 }
 
+// Message the user signs to derive their encryption identity. Stable forever —
+// changing it would derive a different key and orphan existing capsules.
+export const KEY_DERIVATION_MESSAGE =
+  "0G Time Capsule\n\n" +
+  "Sign to create your encryption key. This key lets you decrypt capsules " +
+  "sealed for you, and is the same on every device.\n\n" +
+  "This request is free and will not send a transaction.";
+
+/**
+ * Derive a deterministic secp256k1 keypair from a wallet signature.
+ *
+ * The signature over KEY_DERIVATION_MESSAGE is deterministic for a given wallet
+ * (personal_sign / EIP-191), so the same user re-derives the *same* encryption
+ * key on any device — no manual backup, no loss on cache-clear. We HKDF the
+ * signature into a scalar, bumping a counter on the astronomically rare chance
+ * the candidate is outside the valid secp256k1 range.
+ */
+export function deriveKeypairFromSignature(signature: Uint8Array): { privKey: Uint8Array; pubKey: Uint8Array } {
+  for (let counter = 0; ; counter++) {
+    const salt = utf8ToBytes(`0g-capsule-key-v1:${counter}`);
+    const candidate = hkdf(sha256, signature, salt, utf8ToBytes("0g-capsule-identity"), 32);
+    if (secp256k1.utils.isValidPrivateKey(candidate)) {
+      return { privKey: candidate, pubKey: secp256k1.getPublicKey(candidate, true) };
+    }
+  }
+}
+
 // ── localStorage key management ───────────────────────────────────────────────
 
 const LS_PREFIX = "0g-capsule-enckey-";

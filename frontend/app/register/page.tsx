@@ -8,11 +8,11 @@ import { ConnectButton } from "@/components/ConnectButton";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import {
-  generateEncryptionKeypair,
   savePrivKeyToStorage,
   loadPrivKeyFromStorage,
   hasSavedPrivKey,
 } from "@/lib/ecies";
+import { getOrCreateIdentityKey } from "@/lib/identity";
 import { registerEncryptionKey, hasEncryptionKey } from "@/lib/contract";
 
 export default function RegisterPage() {
@@ -32,8 +32,8 @@ export default function RegisterPage() {
     if (!address) return;
     setLoading(true);
     try {
-      const { privKey, pubKey } = generateEncryptionKeypair();
-      savePrivKeyToStorage(address, privKey);
+      // Deterministic: signs once, derives + caches the key. Same key every device.
+      const { pubKey } = await getOrCreateIdentityKey(address);
       setHasLocal(true);
       const hex = `0x${Buffer.from(pubKey).toString("hex")}` as `0x${string}`;
       setPubkeyHex(hex);
@@ -50,19 +50,19 @@ export default function RegisterPage() {
     } finally { setLoading(false); }
   }
 
-  async function handleReRegister() {
+  // Key is registered on-chain but missing from this browser. Because it's
+  // derived from a wallet signature we can re-create the *same* key — no backup
+  // file needed, nothing on-chain to change.
+  async function handleRestore() {
     if (!address) return;
     setLoading(true);
     try {
-      const { privKey, pubKey } = generateEncryptionKeypair();
-      savePrivKeyToStorage(address, privKey);
-      const hex = `0x${Buffer.from(pubKey).toString("hex")}` as `0x${string}`;
-      setPubkeyHex(hex);
-      const tx = await registerEncryptionKey(hex);
-      setRegistered(true);
-      toast.success("Key updated on-chain!", { description: `Tx: ${tx.slice(0, 18)}…` });
+      const { pubKey } = await getOrCreateIdentityKey(address);
+      setHasLocal(true);
+      setPubkeyHex(`0x${Buffer.from(pubKey).toString("hex")}`);
+      toast.success("Key restored on this device");
     } catch (e: unknown) {
-      toast.error("Re-registration failed", { description: e instanceof Error ? e.message : String(e) });
+      toast.error("Restore failed", { description: e instanceof Error ? e.message : String(e) });
     } finally { setLoading(false); }
   }
 
@@ -98,9 +98,10 @@ export default function RegisterPage() {
     <main className="mx-auto max-w-lg px-4 py-16 sm:px-6">
       <h1 className="mb-1 text-2xl font-bold">Register Encryption Key</h1>
       <p className="mb-8 text-sm text-muted-foreground leading-relaxed">
-        Generate a secp256k1 keypair in your browser. The private key stays in
-        localStorage; the public key is registered on-chain so others can seal
-        capsules specifically for you.
+        Your encryption key is derived from a quick wallet signature — the same
+        key regenerates on any device, so there&apos;s nothing to back up or lose.
+        Only the public key is registered on-chain, so others can seal capsules
+        specifically for you.
       </p>
 
       {!isConnected && (
@@ -128,15 +129,16 @@ export default function RegisterPage() {
           {/* Warning states */}
           {registered && !hasLocal && (
             <div className="rounded-lg border border-amber-800 bg-amber-950/30 p-4 text-sm text-amber-300">
-              On-chain key found but no local private key. Import your backup or
-              re-register (this invalidates capsules encrypted to the old key).
+              Key registered on-chain but not on this device. Click
+              <span className="font-medium"> Restore key </span>
+              to re-derive it from your wallet signature — same key, no backup needed.
             </div>
           )}
 
           {!registered && !hasLocal && (
             <div className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
-              No key registered yet. Click below to generate a keypair and register
-              your public key on-chain.
+              No key registered yet. Click below to sign once and register your
+              public key on-chain.
             </div>
           )}
 
@@ -144,12 +146,12 @@ export default function RegisterPage() {
           <div className="flex flex-wrap gap-3">
             {!registered && (
               <Button onClick={handleRegister} disabled={loading}>
-                {loading ? "Registering…" : "Generate & Register"}
+                {loading ? "Registering…" : "Sign & Register"}
               </Button>
             )}
-            {registered && (
-              <Button variant="secondary" onClick={handleReRegister} disabled={loading}>
-                {loading ? "Updating…" : "Re-register (new key)"}
+            {registered && !hasLocal && (
+              <Button onClick={handleRestore} disabled={loading}>
+                {loading ? "Restoring…" : "Restore key"}
               </Button>
             )}
             {hasLocal && (
@@ -160,20 +162,26 @@ export default function RegisterPage() {
             )}
           </div>
 
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-            <Upload className="h-4 w-4" />
-            Import key from backup
-            <input
-              type="file"
-              accept=".txt"
-              onChange={handleImportKey}
-              className="sr-only"
-            />
-          </label>
+          {/* Advanced: manual backup still supported for legacy / power users. */}
+          <details className="text-sm text-muted-foreground">
+            <summary className="cursor-pointer hover:text-foreground transition-colors">
+              Advanced: import a key from a backup file
+            </summary>
+            <label className="mt-3 flex cursor-pointer items-center gap-2 hover:text-foreground transition-colors">
+              <Upload className="h-4 w-4" />
+              Choose backup file
+              <input
+                type="file"
+                accept=".txt"
+                onChange={handleImportKey}
+                className="sr-only"
+              />
+            </label>
+          </details>
 
           <p className="text-xs text-muted-foreground/60">
-            ⚠ Back up your private key. If you clear localStorage you can no longer decrypt
-            capsules sent to you.
+            Your key is re-derivable from your wallet, so clearing browser storage
+            won&apos;t lock you out — just sign again.
           </p>
         </div>
       )}
