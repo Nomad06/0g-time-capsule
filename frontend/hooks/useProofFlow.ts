@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { useAccount } from "wagmi";
 import { getCapsule, isUnlocked } from "@/lib/contract";
 import { revealCapsule, decryptAsRecipient } from "@/lib/capsule";
-import { loadPrivKeyFromStorage, hasSavedPrivKey } from "@/lib/ecies";
+import { hasSavedPrivKey } from "@/lib/ecies";
+import { getOrCreateIdentityKey } from "@/lib/identity";
 import { mintCapsuleNFT, getCapsuleTokenId } from "@/lib/nft";
 import { CONTRACT_ADDRESSES } from "@/constants/contracts";
 import { formatError } from "@/lib/utils";
@@ -83,19 +84,20 @@ export function useProofFlow(capsuleId: `0x${string}`): ProofFlowState & ProofFl
     }
   }
 
-  // Every capsule is private: decryption always uses this wallet's local ECIES key,
-  // for owner and recipients alike. No public/timelock-only path exists anymore.
-  function requireKey(): Uint8Array {
+  // Every capsule is private: decryption always uses this wallet's ECIES key, for
+  // owner and recipients alike. The key is derived from a wallet signature, so if
+  // it isn't cached on this device we re-derive it (a quick, gasless signature)
+  // rather than failing — cross-device decrypt just works.
+  async function requireKey(): Promise<Uint8Array> {
     if (!address) throw new Error("Connect your wallet first");
-    const privKey = loadPrivKeyFromStorage(address);
-    if (!privKey) throw new Error("No local encryption key found. Visit /register to import or regenerate.");
+    const { privKey } = await getOrCreateIdentityKey(address);
     return privKey;
   }
 
   async function handleReveal() {
     setLoading(true); setError(""); setStatus("Sending reveal tx…");
     try {
-      const privKey = requireKey();
+      const privKey = await requireKey();
       setStatus("Revealing + decrypting…");
       setResult(await revealCapsule(capsuleId, address!, privKey));
     } catch (e: unknown) {
@@ -106,7 +108,7 @@ export function useProofFlow(capsuleId: `0x${string}`): ProofFlowState & ProofFl
   async function handleDecrypt() {
     setLoading(true); setError(""); setStatus("Decrypting with your local key…");
     try {
-      const privKey = requireKey();
+      const privKey = await requireKey();
       setResult(await decryptAsRecipient(capsuleId, address!, privKey));
     } catch (e: unknown) {
       setError(formatError(e));

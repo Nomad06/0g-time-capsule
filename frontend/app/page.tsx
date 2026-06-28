@@ -79,7 +79,7 @@ export default function Home() {
         <div className="absolute left-1/2 top-1/2 -z-10 h-[350px] w-[350px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-violet-600/5 blur-[120px]" />
         <div className="mx-auto max-w-xl">
           <h2 className="mb-4 font-title text-3xl font-black text-white">Ready to seal your first capsule?</h2>
-          <p className="mb-10 text-xs sm:text-sm text-muted-foreground leading-relaxed">Takes less than 2 minutes. No email or signup required. Connect any EVM wallet to start.</p>
+          <p className="mb-10 text-xs sm:text-sm text-muted-foreground leading-relaxed">About a minute. Sign in with email or Google — no wallet extension, no faucet. Have a wallet? Connect that instead.</p>
           <Link
             href="/onboard"
             className="relative inline-flex overflow-hidden rounded-xl bg-violet-600 px-10 py-4 text-xs font-bold uppercase tracking-wider text-white shadow-[0_0_20px_rgba(139,92,246,0.25)] transition-all hover:bg-violet-500 focus-visible:outline-none"

@@ -23,6 +23,11 @@ const STEPS: { id: OnboardStepId; title: string; desc: string }[] = [
 export default function OnboardPage() {
   const f = useOnboardFlow();
 
+  // Embedded (Privy) login auto-handles network + gas, so drop those two steps.
+  const steps = f.embeddedMode
+    ? STEPS.filter(s => s.id !== "network" && s.id !== "gas")
+    : STEPS;
+
   const doneMap: Record<OnboardStepId, boolean> = {
     connect: f.isConnected,
     network: f.isConnected && f.onRightNetwork,
@@ -31,18 +36,22 @@ export default function OnboardPage() {
     seal:    f.sealDone,
     reveal:  f.revealDone,
   };
-  const activeIdx = STEPS.findIndex(s => s.id === f.activeStep);
+  const activeIdx = steps.findIndex(s => s.id === f.activeStep);
 
   return (
     <main className="mx-auto max-w-lg px-4 py-14 sm:px-6">
-      <h1 className="mb-1.5 text-2xl font-bold">Judge quickstart</h1>
+      <h1 className="mb-1.5 text-2xl font-bold">
+        {f.embeddedMode ? "Quickstart" : "Judge quickstart"}
+      </h1>
       <p className="mb-8 text-sm text-muted-foreground">
-        Six steps, ~5 minutes, one wallet — seal a capsule and prove it end to end.
+        {f.embeddedMode
+          ? "Four steps, about a minute — sign in, seal a capsule, and prove it end to end. No wallet extension or faucet needed."
+          : "Six steps, ~5 minutes, one wallet — seal a capsule and prove it end to end."}
       </p>
 
       {/* Stepper */}
       <div className="mb-9 flex items-center">
-        {STEPS.map((s, i) => {
+        {steps.map((s, i) => {
           const done   = doneMap[s.id];
           const active = s.id === f.activeStep;
           return (
@@ -55,7 +64,7 @@ export default function OnboardPage() {
               )}>
                 {done ? <CheckCircle2 className="h-3.5 w-3.5" /> : i + 1}
               </div>
-              {i < STEPS.length - 1 && (
+              {i < steps.length - 1 && (
                 <div className={cn("mx-1.5 h-px flex-1 transition-colors", done ? "bg-green-800" : "bg-border")} />
               )}
             </div>
@@ -72,7 +81,7 @@ export default function OnboardPage() {
 
       {/* Step cards */}
       <div className="flex flex-col gap-3">
-        {STEPS.map((s, i) => {
+        {steps.map((s, i) => {
           const done   = doneMap[s.id];
           const active = s.id === f.activeStep;
           const locked = i > activeIdx && !done;
@@ -164,16 +173,16 @@ function StepBody({ step, f }: { step: OnboardStepId; f: ReturnType<typeof useOn
       return (
         <div>
           <p className="mb-3 text-xs text-muted-foreground leading-relaxed">
-            A secp256k1 keypair is generated in your browser. The private key stays local;
-            the public key is registered on-chain so capsules can be encrypted for you.
+            Sign once to create your encryption key. It&apos;s derived from your wallet,
+            so the same key works on every device — nothing to back up.
             <b className="text-foreground"> Required</b> — capsules are private and undecryptable without it.
           </p>
           <div className="flex flex-wrap gap-3">
             <Button size="sm" onClick={f.registerKey} disabled={!!busy}>
-              {busy ?? "Generate & register key"}
+              {busy ?? "Sign & create key"}
             </Button>
             <Button size="sm" variant="ghost" asChild>
-              <Link href="/register">Import existing key</Link>
+              <Link href="/register">Advanced: import a key</Link>
             </Button>
           </div>
         </div>

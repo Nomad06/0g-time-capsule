@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
+import { guard } from "@/lib/api-guard";
 
-// 0G Compute is OpenAI-compatible.
+const MAX_PROMPT = 2000;
+const MAX_TEMPLATE = 200;
+
+// 0G Compute Router — OpenAI-compatible, TEE-verified inference.
+// API key + balance from https://pc.0g.ai. Model catalog: GET /v1/models.
 const ZG_API_KEY = process.env.ZG_API_KEY ?? "";
-const ZG_BASE_URL = "https://api.inference.0g.ai/v1";
+const ZG_BASE_URL = process.env.ZG_BASE_URL ?? "https://router-api.0g.ai/v1";
 
 // 0G Compute model — set ZG_MODEL env var to override
 const ZG_MODEL = process.env.ZG_MODEL ?? "deepseek-v3";
@@ -22,10 +27,17 @@ Guidelines:
 
 export async function POST(req: NextRequest) {
   try {
+    // Paid endpoint (drains ZG_API_KEY) — gate before any work.
+    const blocked = guard(req, "ai-assist", { limit: 5, windowMs: 60_000 });
+    if (blocked) return blocked;
+
     const { prompt, template } = await req.json() as { prompt: string; template?: string };
 
     if (!prompt?.trim()) {
       return NextResponse.json({ error: "prompt required" }, { status: 400 });
+    }
+    if (prompt.length > MAX_PROMPT || (template && template.length > MAX_TEMPLATE)) {
+      return NextResponse.json({ error: "Input too long" }, { status: 413 });
     }
 
     const userMessage = template
@@ -51,7 +63,7 @@ export async function POST(req: NextRequest) {
     const text = completion.choices[0]?.message?.content ?? "";
     return NextResponse.json({ text, provider: "0g-compute" });
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error("[ai-assist]", e);
+    return NextResponse.json({ error: "AI assist failed" }, { status: 500 });
   }
 }

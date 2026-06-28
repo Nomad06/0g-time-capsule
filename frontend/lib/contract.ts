@@ -6,9 +6,8 @@
 import {
   createPublicClient,
   http,
+  publicActions,
   parseEventLogs,
-  TransactionNotFoundError,
-  TransactionReceiptNotFoundError,
   WaitForTransactionReceiptTimeoutError,
   type WalletClient,
   type PublicClient,
@@ -16,7 +15,8 @@ import {
   type TransactionReceipt,
 } from "viem";
 import { getWalletClient as wagmiGetWalletClient } from "@wagmi/core";
-import { wagmiConfig } from "./wagmi-config";
+import { activeWagmiConfig } from "./active-wagmi-config";
+import { ensureGas } from "./relay";
 import { zeroGTestnet, CONTRACT_ADDRESSES, TIME_CAPSULE_ABI, KEY_REGISTRY_ABI } from "../constants/contracts";
 import type { OnChainCapsule, TriggerType } from "./types";
 
@@ -33,8 +33,26 @@ export function getPublicClient(): PublicClient {
   return _publicClient;
 }
 
+// Gas-drip threshold: if a write-bound account holds less than this, top it up
+// from the relayer so embedded-wallet users never hit the faucet. Funded
+// wallets (advanced users) skip the round-trip entirely.
+const MIN_GAS_WEI = 5_000_000_000_000_000n; // 0.005 A0GI
+
+/** Tops up a near-empty account via the relayer; never throws (best-effort). */
+async function topUpIfNeeded(address: `0x${string}`): Promise<void> {
+  try {
+    const balance = await getPublicClient().getBalance({ address });
+    if (balance >= MIN_GAS_WEI) return;
+    await ensureGas(address);
+  } catch (e) {
+    // Best-effort: if the wallet truly has no gas the write will surface its
+    // own "insufficient funds" error.
+    console.warn("[gas-drip] skipped", e);
+  }
+}
+
 export async function getWalletClient(): Promise<WalletClient & { account: NonNullable<WalletClient["account"]> }> {
-  const client = await wagmiGetWalletClient(wagmiConfig);
+  const client = await wagmiGetWalletClient(activeWagmiConfig);
   if (!client) throw new Error("No wallet connected");
   if (!client.account) throw new Error("Wallet connected but no account available");
   const chainId = await client.getChainId();
@@ -47,10 +65,12 @@ export async function getWalletClient(): Promise<WalletClient & { account: NonNu
       );
     }
     // Re-fetch after switch — old client is stale
-    const switched = await wagmiGetWalletClient(wagmiConfig);
+    const switched = await wagmiGetWalletClient(activeWagmiConfig);
     if (!switched?.account) throw new Error("Switched to 0G Testnet — please try again.");
+    await topUpIfNeeded(switched.account.address);
     return switched as WalletClient & { account: NonNullable<WalletClient["account"]> };
   }
+  await topUpIfNeeded(client.account.address);
   return client as WalletClient & { account: NonNullable<WalletClient["account"]> };
 }
 
@@ -58,38 +78,50 @@ export async function getWalletClient(): Promise<WalletClient & { account: NonNu
 
 type WriteContractArgs = Parameters<WalletClient["writeContract"]>[0];
 
+type ReceiptReader = Pick<PublicClient, "getTransactionReceipt">;
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
 /**
- * Receipt wait tolerant of 0G's load-balanced public RPC.
+ * Receipt wait that races the wallet's own RPC against the public RPC.
  *
- * Writes broadcast through the wallet's RPC, but receipts are polled from the
- * public client's endpoint. A freshly broadcast tx is often "not found" on
- * whichever replica serves the poll until the broadcast propagates — viem then
- * exhausts its small default retryCount and throws TransactionReceiptNotFoundError.
- * This surfaces most when sealing *with recipients*, where seal() and
- * setRecipientKeys() fire back-to-back and the second tx is polled immediately.
+ * The wallet broadcasts the tx through ITS node (e.g. Privy's), which therefore
+ * knows the tx immediately. The public endpoint (`getPublicClient()`) is
+ * load-balanced across replicas, so a poll there often hits a node that hasn't
+ * seen the broadcast yet → "receipt not found" until it propagates. By polling
+ * BOTH each cycle and taking whichever returns first, we remove that
+ * cross-node lag at the source; the public node is a fallback if the wallet
+ * transport can't read receipts.
  *
- * Swallow the transient not-found / timeout errors and keep polling to a deadline.
+ * Pass `walletClient` (from getWalletClient) to enable the dual-poll; without it
+ * this falls back to public-only polling.
  */
-export async function waitForReceipt(hash: Hash): Promise<TransactionReceipt> {
-  const pub      = getPublicClient();
-  const deadline = Date.now() + 120_000;
-  for (;;) {
-    try {
-      return await pub.waitForTransactionReceipt({
-        hash,
-        timeout:         Math.max(8_000, deadline - Date.now()),
-        pollingInterval: 4_000,
-        retryCount:      30,
-      });
-    } catch (err) {
-      const propagating =
-        err instanceof TransactionReceiptNotFoundError ||
-        err instanceof TransactionNotFoundError ||
-        err instanceof WaitForTransactionReceiptTimeoutError;
-      if (propagating && Date.now() < deadline) continue;
-      throw err;
-    }
+export async function waitForReceipt(
+  hash: Hash,
+  walletClient?: WalletClient,
+): Promise<TransactionReceipt> {
+  const readers: ReceiptReader[] = [getPublicClient()];
+  if (walletClient) {
+    // Extend the wallet client with public actions so getTransactionReceipt runs
+    // over the wallet's own transport (the node that broadcast the tx).
+    readers.unshift(walletClient.extend(publicActions) as unknown as ReceiptReader);
   }
+
+  // 0G testnet + embedded-wallet RPC propagation can lag past a minute under
+  // load, so wait generously.
+  const deadline = Date.now() + 300_000;
+  while (Date.now() < deadline) {
+    for (const reader of readers) {
+      try {
+        const receipt = await reader.getTransactionReceipt({ hash });
+        if (receipt) return receipt;
+      } catch {
+        // Not mined on this node yet (or transient) — try the next source / cycle.
+      }
+    }
+    await sleep(3_000);
+  }
+  throw new WaitForTransactionReceiptTimeoutError({ hash });
 }
 
 /**
@@ -103,7 +135,7 @@ async function writeAndWait(args: Omit<WriteContractArgs, "account" | "chain">):
     account: wallet.account,
     chain:   zeroGTestnet,
   } as WriteContractArgs);
-  await waitForReceipt(txHash);
+  await waitForReceipt(txHash, wallet);
   return txHash;
 }
 
@@ -146,7 +178,7 @@ export async function sealOnChain(params: SealContractParams): Promise<SealTxRes
     ],
   });
 
-  const receipt = await waitForReceipt(txHash);
+  const receipt = await waitForReceipt(txHash, wallet);
 
   const logs = parseEventLogs({
     abi:  TIME_CAPSULE_ABI,
@@ -180,7 +212,7 @@ export async function revealOnChain(capsuleId: `0x${string}`): Promise<RevealTxR
     args: [capsuleId],
   });
 
-  const receipt = await waitForReceipt(txHash);
+  const receipt = await waitForReceipt(txHash, wallet);
 
   const logs = parseEventLogs({
     abi:  TIME_CAPSULE_ABI,

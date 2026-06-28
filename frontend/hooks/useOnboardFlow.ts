@@ -9,12 +9,9 @@ import {
   getCapsule,
   isUnlocked,
 } from "@/lib/contract";
-import {
-  generateEncryptionKeypair,
-  savePrivKeyToStorage,
-  loadPrivKeyFromStorage,
-  hasSavedPrivKey,
-} from "@/lib/ecies";
+import { hasSavedPrivKey } from "@/lib/ecies";
+import { getOrCreateIdentityKey } from "@/lib/identity";
+import { PRIVY_APP_ID } from "@/lib/privy-config";
 import { sealCapsule, revealCapsule } from "@/lib/capsule";
 import { mintCapsuleNFT, getCapsuleTokenId } from "@/lib/nft";
 import { zeroGTestnet, CONTRACT_ADDRESSES } from "@/constants/contracts";
@@ -57,6 +54,7 @@ export interface OnboardState {
   busy:       string | null;   // label of the in-flight action, or null
   error:      string;
   nftEnabled: boolean;
+  embeddedMode: boolean;       // Privy login active → collapsed 4-step flow
 }
 
 export interface OnboardActions {
@@ -75,6 +73,12 @@ export function useOnboardFlow(): OnboardState & OnboardActions {
 
   const onRightNetwork = chainId === zeroGTestnet.id;
   const nftEnabled     = CONTRACT_ADDRESSES.CapsuleNFT !== "0x";
+
+  // With Privy enabled the embedded wallet defaults to 0G and gas is auto-dripped
+  // by the relayer at write time, so the "add network" and "get gas" steps are
+  // unnecessary — the seal/key writes self-heal (switch chain + drip) anyway.
+  // We collapse the flow to connect → key → seal → reveal.
+  const embeddedMode = !!PRIVY_APP_ID;
 
   const [hasGas,        setHasGas]        = useState(false);
   const [keyDone,       setKeyDone]       = useState(false);
@@ -164,7 +168,15 @@ export function useOnboardFlow(): OnboardState & OnboardActions {
 
   // ── Active step = first incomplete ─────────────────────────────────────────────
 
-  const activeStep = computeActiveStep({ isConnected, onRightNetwork, hasGas, keyDone, sealDone });
+  // In embedded mode, treat network + gas as satisfied so the active step jumps
+  // straight from connect to key.
+  const activeStep = computeActiveStep({
+    isConnected,
+    onRightNetwork: embeddedMode || onRightNetwork,
+    hasGas:         embeddedMode || hasGas,
+    keyDone,
+    sealDone,
+  });
 
   // ── Actions ────────────────────────────────────────────────────────────────────
 
@@ -183,8 +195,7 @@ export function useOnboardFlow(): OnboardState & OnboardActions {
     if (!address) return;
     setError(""); setBusy("Registering encryption key…");
     try {
-      const { privKey, pubKey } = generateEncryptionKeypair();
-      savePrivKeyToStorage(address, privKey);
+      const { pubKey } = await getOrCreateIdentityKey(address);
       const hex = `0x${Buffer.from(pubKey).toString("hex")}` as `0x${string}`;
       await registerEncryptionKey(hex);
       setKeyDone(true);
@@ -223,8 +234,7 @@ export function useOnboardFlow(): OnboardState & OnboardActions {
     if (!address || !demoCapsuleId) return;
     setError(""); setBusy("Revealing + decrypting…");
     try {
-      const privKey = loadPrivKeyFromStorage(address);
-      if (!privKey) throw new Error("Encryption key missing on this device — re-register at /register.");
+      const { privKey } = await getOrCreateIdentityKey(address);
       const r = await revealCapsule(demoCapsuleId, address, privKey);
       setResult(r);
       setRevealDone(true);
@@ -235,9 +245,9 @@ export function useOnboardFlow(): OnboardState & OnboardActions {
 
   return {
     address, isConnected, onRightNetwork,
-    hasGas, keyDone, sealDone, revealDone,
+    hasGas: embeddedMode || hasGas, keyDone, sealDone, revealDone,
     demoCapsuleId, unlocked, secondsLeft, nftTokenId, result,
-    activeStep, busy, error, nftEnabled,
+    activeStep, busy, error, nftEnabled, embeddedMode,
     addNetwork, registerKey, sealDemo, mintNft, reveal, refresh,
   };
 }
